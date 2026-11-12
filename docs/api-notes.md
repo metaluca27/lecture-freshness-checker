@@ -1,0 +1,92 @@
+# Liner API 동작 시험 기록
+
+시험일 2026-11-12. 키는 Windows 사용자 환경변수 `LINER_API_KEY`에서 읽었고, 이 문서와 저장소에는 키 값을 적지 않는다.
+
+## 결과 요약
+
+| 시험 | 결과 | 한 줄 정리 |
+|---|---|---|
+| Search | 통과 | 설계대로 `results[].url/title/description/date`가 온다 |
+| Model 글자 JSON 답변 | 통과 | `json_schema` 방식으로 받는다. `json_object`는 쓰지 않는다 |
+| Model 그림 읽기 | 통과 | 앱 화면 3장의 메뉴와 버튼 이름을 맞게 읽었다 |
+| 공식 문서 본문 읽기 | 통과 | 평범한 `fetch`로 본문이 나온다. 문서 주소 뒤에 `.md`를 붙이면 더 깨끗하다 |
+
+네 가지 모두 통과라 계획의 대안(다른 비전 모델, 시연 자료 교체)은 쓰지 않는다.
+
+## 1. Search
+
+- 주소: `POST https://platform.liner.com/api/v1/tools/search/web`
+- 인증: `x-api-key` 헤더
+- 요청: `{ "query": "...", "max_results": 5 }`
+- 응답: `{ requestId, results: [{ title, url, hostname, faviconUrl, description, date }], totalCount }`
+- `date`는 `null`일 수 있다(공식 사이트 결과 2건 모두 `null`).
+- `hostname`이 따로 와서 출처 등급을 매길 때 바로 쓸 수 있다.
+- 응답에 비용 값은 없다.
+- 질문 "Antigravity 요금제 가격" 결과 5건: `antigravity.google` 2건(요금 페이지 영문, 한글), 그 외 안내 사이트 2건, 레딧 1건. 비공식 출처가 섞여 나오므로 출처 등급 구분이 꼭 필요하다.
+
+## 2. Model 글자 답변
+
+- 주소: `POST https://platform.liner.com/api/v1/chat/completions` (OpenAI 형식)
+- 인증: `Authorization: Bearer <키>`
+- 모델: `liner-mark-1.3`
+- 출력 길이 제한은 `max_completion_tokens`를 쓴다. `max_tokens`를 보내면 400으로 거절된다.
+- JSON 답변 방식 세 가지를 같은 한글 슬라이드 문장으로 시험했다.
+
+| 방식 | 결과 |
+|---|---|
+| 지시문만으로 JSON 요청 | 200. 올바른 JSON이 왔지만 형식 보장은 없다 |
+| `response_format: { type: "json_object" }` | 영어 한 줄 질문은 200, 한글 system+user 구성은 400. 원인을 못 밝혔으므로 쓰지 않는다 |
+| `response_format: { type: "json_schema", strict: true }` | 200. 스키마대로 왔다. **이 방식을 쓴다** |
+
+- 시험 문장에서 요금(19.99달러), 개수(60개), 메뉴 이름(Agent Manager) 세 가지를 뽑았고, 일반 설명("구글이 만든 AI 코딩 도구")은 뺐다. 설계의 골라내기 의도와 맞는다.
+- 응답 시간 3~5초, 토큰 약 180 입력 / 100 출력.
+- 오류 응답 형식: `{ "error": { "message", "type", "param", "code" } }`. 400의 `message`가 원인을 알려 주지 않으므로, 요청 형식은 이 문서에 적힌 것만 쓴다.
+
+## 3. Model 그림 읽기
+
+- 같은 주소, 같은 모델. `content`에 `{ "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }`를 넣는다.
+- 외부 그림 주소는 못 쓰고 base64 데이터 주소만 된다(문서 기준). 요청당 최대 10장.
+- 시험 그림은 안티그라비티 강의 PPT에 쓴 앱 화면 3장(개인정보가 없는 화면만 골랐다).
+
+| 그림 | 모델이 읽은 것 | 눈으로 확인 |
+|---|---|---|
+| 왼쪽 메뉴 | New Conversation, Automations, Customizations | 일치 |
+| 마켓플레이스 위쪽 | Customizations, Marketplace, Installed, + Add, Details | 일치 |
+| 마켓플레이스 구글 묶음 | Marketplace, Installed, Gemini API, Chrome DevTools, Android CLI, Firebase, Science, Google Antigravity SDK, + See 6 more | 원본과 대조는 아직 안 함 |
+
+- 그림 1장당 입력 약 1,100토큰, 응답 4~7초.
+
+## 4. 공식 문서 본문 읽기
+
+워커가 하듯 평범한 `fetch`로 가져와 태그를 걷어 냈다.
+
+| 주소 | 결과 |
+|---|---|
+| `antigravity.google/docs` | 200이지만 본문은 "Redirecting to: /docs/getting-started" 한 줄. HTML 안내 방식의 이동이라 `fetch`가 따라가지 않는다 |
+| `antigravity.google/docs/getting-started` | 본문 약 21,600자 |
+| `antigravity.google/docs/getting-started.md` | Markdown 약 20,900자. 메뉴 글자가 섞이지 않아 가장 깨끗하다 |
+| `antigravity.google/docs/changelog` | 본문 약 524,000자. 통째로 모델에 넣기에는 너무 길다 |
+| `antigravity.google/pricing` | 본문 약 4,300자. "$0/month", "$30 USD per seat per month" 같은 가격 글자가 보인다 |
+| `antigravity.google/llms.txt` | 문서 주소 124개 목록 |
+
+구현에 반영할 것:
+
+1. "Redirecting to:" 본문이 오면 그 주소로 한 번 더 가져온다.
+2. `/docs/...` 주소는 `.md`를 먼저 시도하고, 안 되면 HTML로 읽는다.
+3. 긴 본문은 통째로 넣지 않고, 슬라이드 내용의 핵심 낱말이 있는 주변만 잘라 모델에 준다.
+4. 근거 대조는 잘라 낸 조각이 아니라 가져온 본문 전체를 상대로 한다.
+
+## 5. 비용
+
+- 응답에 `usage.cost` 값은 없다. `usage.prompt_tokens`, `usage.completion_tokens`만 온다. 비용은 토큰 수에 단가를 곱해 직접 계산하고, 실제 차감은 Liner Platform 대시보드에서 확인한다.
+- 단가(Liner 가격 문서, 2026-11-12 확인): `liner-mark-1.3` 입력 100만 토큰당 $1.00, 출력 $5.00. Search는 호출당 $0.001(Premium Data 포함 시 $0.002). Deep Research Agent는 호출당 $0.20.
+- 계산값: 글자 판정 1회 약 $0.001, 그림 1장 약 $0.002, 검색 1회 $0.001~0.002.
+- 오늘 시험 전체 호출은 Model 13회(그중 3회는 400 거절), Search 1회로, 계산상 $0.02 미만이다. 대시보드의 실제 차감액과는 아직 맞춰 보지 않았다.
+
+## 6. 계획과 달라진 점
+
+| 계획 | 실제 | 조치 |
+|---|---|---|
+| 비용은 응답의 `usage.cost`를 기록 | 그 값이 없다 | 토큰 수로 계산한다 |
+| JSON 답변 방식 미정 | `json_schema`만 안정적 | `chatJson`은 스키마를 받아 `json_schema`로 요청한다 |
+| 본문은 HTML에서 꺼낸다 | `.md` 주소가 더 깨끗하고, `/docs`는 안내 방식으로 이동한다 | `fetchPageText`에 위 1~3번을 넣는다 |
