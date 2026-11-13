@@ -86,10 +86,16 @@ async function handleFile(file) {
   // 주제를 보고 공식 사이트를 제안받는다. 실패해도 직접 적으면 된다.
   try {
     const sample = slides.map((s) => s.text).join('\n').slice(0, 3000);
-    const out = await callApi('/api/suggest-sites', { sample });
+    let out = await callApi('/api/suggest-sites', { sample });
+    if (!out.tier1?.length) out = await callApi('/api/suggest-sites', { sample }); // 빈 제안이면 한 번 더 묻는다
     if (!$('tier1').value) $('tier1').value = (out.tier1 ?? []).join(', ');
     if (!$('tier2').value) $('tier2').value = (out.tier2 ?? []).join(', ');
-    setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장. AI가 제안한 사이트예요. 맞는지 확인하고 필요하면 고쳐 주세요.`);
+    if ($('tier1').value.trim()) {
+      setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장. AI가 제안한 사이트예요. 맞는지 확인하고 필요하면 고쳐 주세요.`);
+    } else {
+      setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장. AI가 공식 사이트를 제안하지 못했어요. 위 칸에 공식 사이트 도메인을 직접 적어 주세요.`);
+      $('tier1').focus();
+    }
   } catch {
     setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장. 사이트 제안을 받지 못했어요. 공식 사이트 도메인을 직접 적어 주세요.`);
   }
@@ -109,9 +115,15 @@ function readDomains() {
   return { domains: { tier1: t1.items, tier2: t2.items.filter((d) => !t1.items.includes(d)) } };
 }
 
+// 시작 버튼을 켜고 끄고, 꺼져 있을 때는 무엇이 남았는지 버튼 옆에 알려 준다.
 function updateStart() {
-  const { domains } = readDomains();
-  $('start').disabled = !(domains && $('confirm').checked);
+  const { domains, error } = readDomains();
+  const ready = Boolean(domains && $('confirm').checked);
+  $('start').disabled = !ready;
+  let hint = '';
+  if (error) hint = error.startsWith('공식 사이트를 하나') ? '먼저 위의 "공식 사이트" 칸에 도메인을 적어 주세요. 예: notebooklm.google.com' : error;
+  else if (!$('confirm').checked) hint = '사이트가 맞는지 확인하고 위의 확인란에 표시해 주세요.';
+  $('start-hint').textContent = hint;
 }
 
 // ---------- 3. 검사 ----------

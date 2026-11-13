@@ -70,6 +70,7 @@ main:has(.wide:not([hidden])) { max-width: 1080px; }
 .notice { margin: 14px 0 0; padding: 12px 14px; border-radius: 10px; background: #fbf3dc; color: #5c4a12; font-size: 14px; }
 .help { margin: 0 0 16px; color: var(--ink-soft); font-size: 15px; }
 .status { margin: 12px 0 0; min-height: 1.4em; color: var(--ink-soft); font-size: 15px; }
+.hint { margin: 10px 0 0; min-height: 1.4em; color: var(--changed); font-size: 14px; font-weight: 600; }
 .status.error { color: var(--changed); font-weight: 600; }
 
 .field { margin-bottom: 14px; }
