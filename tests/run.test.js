@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runCheck } from '../web/run.js';
+import { runCheck, pickImage } from '../web/run.js';
 
 const domains = { tier1: ['antigravity.google'], tier2: [] };
 const slidesOf = (n) => Array.from({ length: n }, (_, i) => ({ slide: i + 1, text: `${i + 1}장 글자`, notes: `${i + 1}장 노트`, images: [] }));
@@ -34,7 +34,7 @@ test('슬라이드 3장: 추출한 뒤 내용을 하나씩 검사하고 진행 �
   const out = await runCheck(slidesOf(3), domains, api, (e) => events.push(e));
 
   assert.equal(api.stats.extractCalls.length, 3);
-  assert.deepEqual(api.stats.extractCalls[0], { slide: 1, text: '1장 글자', notes: '1장 노트', imageDataUrl: null, context: '1장 글자\n2장 글자\n3장 글자' });
+  assert.deepEqual(api.stats.extractCalls[0], { slide: 1, text: '1장 글자', notes: '1장 노트', imageDataUrl: null, context: '1장 글자\n2장 글자\n3장 글자\n1장 노트\n2장 노트\n3장 노트' });
   assert.equal(out.claims.length, 6);
   assert.equal(out.results.length, 6);
   assert.deepEqual(out.claims.map((c) => c.id), ['s1-c1', 's1-c2', 's2-c1', 's2-c2', 's3-c1', 's3-c2'], '슬라이드 순서대로');
@@ -128,6 +128,56 @@ test('글자도 노트도 없는 장은 추출 요청을 보내지 않는다', a
   const out = await runCheck(slides, domains, api, () => {});
   assert.deepEqual(api.stats.extractCalls.map((c) => c.slide), [2]);
   assert.equal(out.claims.length, 2);
+});
+
+// ---------- 슬라이드 그림 읽기 ----------
+
+const img = (name, size) => ({ name, bytes: new Uint8Array(size), mime: 'image/png' });
+
+test('pickImage: 글자가 적고 그림이 있는 장에서 가장 큰 그림을 고른다', () => {
+  const slide = { slide: 1, text: '', notes: '노트', images: [img('icon.png', 10), img('full.png', 500000), img('photo.png', 30000)] };
+  assert.equal(pickImage(slide).name, 'full.png');
+});
+
+test('pickImage: 글자가 충분한 장과 그림이 없는 장은 고르지 않는다', () => {
+  assert.equal(pickImage({ slide: 1, text: '가'.repeat(200), notes: '', images: [img('a.png', 5000)] }), null);
+  assert.equal(pickImage({ slide: 1, text: '', notes: '', images: [] }), null);
+  assert.equal(pickImage({ slide: 1, text: '', notes: '' }), null);
+});
+
+test('pickImage: 아이콘처럼 아주 작은 그림뿐이면 고르지 않는다', () => {
+  assert.equal(pickImage({ slide: 1, text: '', notes: '', images: [img('icon.png', 2000)] }), null);
+});
+
+test('imageFor 가 준 그림을 추출 요청에 함께 보낸다', async () => {
+  const api = fakeApi();
+  const slides = [{ slide: 1, text: '', notes: '', images: [img('full.png', 50000)] }, { slide: 2, text: '글자가 있는 장', notes: '', images: [] }];
+  const seen = [];
+  await runCheck(slides, domains, api, () => {}, { imageFor: async (s) => { seen.push(s.slide); return s.slide === 1 ? 'data:image/jpeg;base64,AAAA' : null; } });
+  const bySlide = Object.fromEntries(api.stats.extractCalls.map((c) => [c.slide, c.imageDataUrl]));
+  assert.deepEqual(bySlide, { 1: 'data:image/jpeg;base64,AAAA', 2: null });
+  assert.deepEqual(seen.sort(), [1, 2]);
+});
+
+test('그림에서 나온 내용은 origin 이 image 로 남는다', async () => {
+  const api = fakeApi();
+  api.extract = async (input) => ({ claims: [{ id: `s${input.slide}-c1`, slide: input.slide, origin: input.imageDataUrl ? 'image' : 'text', text: '그림 속 버전 2.31', kind: 'version' }] });
+  const out = await runCheck([{ slide: 1, text: '', notes: '', images: [img('full.png', 50000)] }], domains, api, () => {}, { imageFor: async () => 'data:image/jpeg;base64,AAAA' });
+  assert.equal(out.claims[0].origin, 'image');
+});
+
+test('그림 준비에 실패해도 글자와 노트는 검사한다', async () => {
+  const api = fakeApi();
+  const out = await runCheck([{ slide: 1, text: '글자', notes: '노트', images: [img('full.png', 50000)] }], domains, api, () => {}, { imageFor: async () => { throw new Error('canvas 실패'); } });
+  assert.equal(api.stats.extractCalls[0].imageDataUrl, null);
+  assert.equal(out.results.length, 2);
+  assert.deepEqual(out.failedSlides, []);
+});
+
+test('슬라이드 글자가 거의 없으면 발표 노트를 자료 주제로 보낸다', async () => {
+  const api = fakeApi();
+  await runCheck([{ slide: 1, text: '', notes: '제미나이 노트북 사용법을 소개해요', images: [] }], domains, api, () => {});
+  assert.match(api.stats.extractCalls[0].context, /제미나이 노트북/);
 });
 
 test('onProgress 가 예외를 내도 검사는 계속한다', async () => {

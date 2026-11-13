@@ -144,6 +144,7 @@ button.ghost:hover { background: #f1ede3; }
 .slide-side { position: sticky; top: 12px; align-self: start; }
 .slide-no { margin: 0 0 6px; font-weight: 800; font-size: 15px; color: var(--accent); }
 .slide-text { margin: 0; max-height: 220px; overflow: auto; padding: 12px; border-radius: 10px; background: #faf7f0; border: 1px solid var(--line); color: var(--ink-soft); font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.slide-thumb { display: block; width: 100%; height: auto; margin-bottom: 8px; border-radius: 10px; border: 1px solid var(--line); background: #fff; }
 .slide-cards { display: grid; gap: 12px; }
 
 .card { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: #fff; border-left-width: 5px; }

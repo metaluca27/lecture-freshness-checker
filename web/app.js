@@ -3,7 +3,7 @@
 
 import { API_BASE, MAX_FILE_BYTES } from './config.js';
 import { parsePptx } from './pptx.js';
-import { runCheck } from './run.js';
+import { runCheck, pickImage } from './run.js';
 import { summarize, toMarkdown, VERDICT_LABEL, formatElapsed } from './report.js';
 
 const $ = (id) => document.getElementById(id);
@@ -129,6 +129,42 @@ function updateStart() {
   $('start-hint').textContent = hint;
 }
 
+// ---------- 슬라이드 그림 ----------
+
+const MAX_IMAGE_SIDE = 1568;
+
+// 글자가 그림 안에 들어 있는 장은 그림을 작게 줄여 모델에 보여 준다. 읽을 그림이 없으면 null.
+async function slideImageDataUrl(slide) {
+  const image = pickImage(slide);
+  if (!image) return null;
+  const bitmap = await createImageBitmap(new Blob([image.bytes], { type: image.mime }));
+  const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+// 결과 화면에서 글자 없는 장 대신 보여 줄 그림 주소. 장마다 한 번만 만든다.
+const thumbUrls = new Map();
+function slideThumbUrl(slide) {
+  if (!thumbUrls.has(slide.slide)) {
+    const image = pickImage(slide);
+    thumbUrls.set(slide.slide, image ? URL.createObjectURL(new Blob([image.bytes], { type: image.mime })) : null);
+  }
+  return thumbUrls.get(slide.slide);
+}
+
+function clearThumbs() {
+  for (const url of thumbUrls.values()) if (url) URL.revokeObjectURL(url);
+  thumbUrls.clear();
+}
+
 // ---------- 3. 검사 ----------
 
 async function startRun() {
@@ -150,7 +186,7 @@ async function startRun() {
     check: (input) => callApi('/api/check', input, undefined),
   };
 
-  state.run = await runCheck(state.slides, domains, api, onProgress, { signal });
+  state.run = await runCheck(state.slides, domains, api, onProgress, { signal, imageFor: slideImageDataUrl });
   renderResult();
   show('step-result');
 }
@@ -261,7 +297,8 @@ function renderCards() {
     rows.push(el('section', { class: 'slide-row' }, [
       el('div', { class: 'slide-side' }, [
         el('p', { class: 'slide-no', text: `슬라이드 ${slide.slide}` }),
-        el('p', { class: 'slide-text', text: slide.text || '(글자 없음)' }),
+        slideThumbUrl(slide) ? el('img', { class: 'slide-thumb', src: slideThumbUrl(slide), alt: `슬라이드 ${slide.slide} 그림`, loading: 'lazy' }) : null,
+        slide.text.trim() ? el('p', { class: 'slide-text', text: slide.text }) : (slideThumbUrl(slide) ? null : el('p', { class: 'slide-text', text: '(글자 없음)' })),
       ]),
       el('div', { class: 'slide-cards' }, items.map(card)),
     ]));
@@ -322,6 +359,7 @@ function markdown() {
 
 function reset() {
   state.controller?.abort();
+  clearThumbs();
   Object.assign(state, { fileName: '', slides: [], domains: null, run: null, controller: null, filter: 'all' });
   $('file').value = '';
   setStatus('upload-status', '');

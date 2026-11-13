@@ -4,6 +4,21 @@
 export const MAX_CONCURRENCY = 3;
 export const MAX_CLAIMS = 60;
 
+// 글자가 이보다 적은 장은 글자가 그림 안에 들어 있을 가능성이 커서 그림도 읽는다.
+export const IMAGE_TEXT_THRESHOLD = 120;
+const MIN_IMAGE_BYTES = 8 * 1024; // 아이콘이나 로고는 읽지 않는다
+
+/**
+ * 이 장에서 모델에 보여 줄 그림을 고른다. 읽을 필요가 없으면 null.
+ * 장 전체를 그림 한 장으로 내보낸 PPT 를 위한 장치라서 가장 큰 그림 하나만 고른다.
+ */
+export function pickImage(slide) {
+  if ((slide?.text ?? '').trim().length >= IMAGE_TEXT_THRESHOLD) return null;
+  const images = (slide?.images ?? []).filter((i) => i?.bytes?.length >= MIN_IMAGE_BYTES);
+  if (images.length === 0) return null;
+  return images.reduce((a, b) => (b.bytes.length > a.bytes.length ? b : a));
+}
+
 const FAILED_TASK = '검사 요청이 실패해서 확인하지 못했어요. 다시 검사하거나 직접 확인해 주세요.';
 
 // items 를 최대 limit 개씩 동시에 처리한다. 중단 신호가 오면 새 일을 시작하지 않는다.
@@ -38,7 +53,9 @@ export async function runCheck(slides, domains, api, onProgress, options = {}) {
   };
 
   // 제품 이름이 없는 장도 검색어를 제대로 만들 수 있게, 자료 첫 부분을 주제로 함께 보낸다.
-  const context = slides.map((s) => (s.text ?? '').trim()).filter(Boolean).join('\n').slice(0, 300);
+  // 글자가 그림으로만 들어 있는 자료는 발표 노트를 대신 쓴다.
+  const joined = (key) => slides.map((s) => (s[key] ?? '').trim()).filter(Boolean).join('\n');
+  const context = (joined('text').length >= 40 ? joined('text') : `${joined('text')}\n${joined('notes')}`).trim().slice(0, 300);
 
   // 1) 장마다 낡을 수 있는 내용을 뽑는다.
   const targets = slides.filter((s) => (s.text ?? '').trim() || (s.notes ?? '').trim() || (imageFor && s.images?.length));
