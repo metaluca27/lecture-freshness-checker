@@ -1,0 +1,15 @@
+{
+  "name": "lecture-freshness-checker",
+  "version": "0.1.0",
+  "description": "강의 PPT의 낡은 내용을 공식 문서와 대조해 짚어 주는 검사기",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "dev": "wrangler dev --config worker/wrangler.toml",
+    "deploy": "wrangler deploy --config worker/wrangler.toml"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

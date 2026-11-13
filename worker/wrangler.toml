@@ -1,0 +1,7 @@
+name = "lecture-freshness-checker"
+main = "index.js"
+compatibility_date = "2026-11-01"
+
+# 키는 여기에 적지 않는다. 배포할 때 아래 명령으로 따로 넣는다.
+#   npx wrangler secret put LINER_API_KEY --config worker/wrangler.toml
+# 로컬에서 켤 때는 worker/.dev.vars 에 둔다(.gitignore 에 들어 있다).
