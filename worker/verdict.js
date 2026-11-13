@@ -13,9 +13,12 @@ const HUMAN_TASKS = {
   no_official_source: '공식 사이트에서는 근거를 찾지 못했어요. 공식 문서를 직접 열어 확인해 주세요.',
   quote_not_in_page: '근거 문장이 공식 문서 본문에서 확인되지 않았어요. 공식 문서를 직접 열어 확인해 주세요.',
   no_matching_quote: '공식 문서에서 이 내용과 맞는 문장을 찾지 못했어요. 직접 확인해 주세요.',
+  page_unreadable: '공식 문서 페이지를 읽어 오지 못했어요. 페이지를 직접 열어 확인해 주세요.',
+  api_error: '검사 중에 오류가 나서 확인하지 못했어요. 잠시 뒤 다시 검사하거나 직접 확인해 주세요.',
 };
 
-function unverified(reason, humanTask) {
+/** unverified 결과를 만든다. suggestion 은 항상 null, humanTask 는 항상 채운다. */
+export function unverified(reason, humanTask) {
   const task = typeof humanTask === 'string' && humanTask.trim() ? humanTask.trim() : HUMAN_TASKS[reason];
   return { verdict: 'unverified', evidence: [], suggestion: null, humanTask: task, reason };
 }
