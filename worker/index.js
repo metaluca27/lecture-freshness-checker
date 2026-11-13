@@ -5,8 +5,8 @@ import { search as linerSearch, chatJson as linerChatJson } from './liner.js';
 import { fetchPageText as realFetchPageText } from './page.js';
 import { checkClaim } from './check.js';
 import {
-  extractMessages, judgeMessages, suggestSitesMessages,
-  EXTRACT_SCHEMA, JUDGE_SCHEMA, SITES_SCHEMA, KINDS, MAX_CLAIMS_PER_SLIDE,
+  extractMessages, judgeMessages, suggestSitesMessages, topicMessages,
+  EXTRACT_SCHEMA, JUDGE_SCHEMA, SITES_SCHEMA, TOPIC_SCHEMA, KINDS, MAX_CLAIMS_PER_SLIDE,
 } from './prompts.js';
 
 const ALLOWED_ORIGINS = new Set([
@@ -156,10 +156,18 @@ export function makeWorker(deps = {}) {
       if (typeof body.sample !== 'string' || !body.sample.trim()) throw bad('invalid_sample');
       // 모델의 기억만 믿지 않고, 자료 제목으로 먼저 검색해서 지금 실제로 나오는 사이트를 함께 보여 준다.
       // (제품 이름이나 주소가 바뀐 경우를 잡기 위해서다.) 검색이 실패해도 제안은 계속한다.
+      // 검색어는 모델이 자료에서 알아낸 제품 이름으로 만든다. 못 알아내면 자료 첫 줄들을 쓴다.
       const title = body.sample.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 4).join(' ').slice(0, 120);
+      let query = `${title} 공식 사이트`;
+      try {
+        const topic = await chatJson(topicMessages(body.sample), env, { schema: TOPIC_SCHEMA, schemaName: 'topic', maxTokens: 200 });
+        if (typeof topic?.query === 'string' && topic.query.trim()) query = topic.query.trim().slice(0, 150);
+      } catch {
+        // 제품 이름을 못 알아내도 제안은 계속한다.
+      }
       let hits = [];
       try {
-        hits = await search(`${title} 공식 사이트`, env, { maxResults: 8 });
+        hits = await search(query, env, { maxResults: 8 });
       } catch {
         hits = [];
       }

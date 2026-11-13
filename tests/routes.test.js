@@ -162,8 +162,18 @@ test('/api/suggest-sites: 자료 제목으로 먼저 검색하고, 나온 사이
   assert.equal(res.status, 200);
   assert.equal(f.log.search.length, 1);
   assert.match(f.log.search[0], /제미나이 노트북 GEMINI NOTEBOOK 사용법 공식 사이트/);
-  const shown = f.log.chat[0].messages.map((m) => m.content).join('\n');
+  const shown = f.log.chat.find((c) => c.options.schemaName === 'sites').messages.map((m) => m.content).join('\n');
   assert.match(shown, /<search_results>\n- notebook\.google\.com · Gemini Notebook - Google\n<\/search_results>/);
+});
+
+test('/api/suggest-sites: 모델이 알아낸 제품 이름으로 검색한다', async () => {
+  const f = fakes({
+    chat: (name) => (name === 'topic' ? { product: 'Gemini Notebook', query: 'Gemini Notebook official site' } : { tier1: ['notebook.google.com'], tier2: [] }),
+    results: [{ url: 'https://notebook.google.com/', title: 'Gemini Notebook', hostname: 'notebook.google.com' }],
+  });
+  const res = await makeWorker(f).fetch(post('/api/suggest-sites', { sample: '강사 아무개\n출퇴근길이 1:1 과외가 되는\n제미나이 노트북' }), env);
+  assert.deepEqual(f.log.search, ['Gemini Notebook official site']);
+  assert.deepEqual((await res.json()).tier1, ['notebook.google.com']);
 });
 
 test('/api/suggest-sites: 검색이 실패해도 제안은 계속한다', async () => {
