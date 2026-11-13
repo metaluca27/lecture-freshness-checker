@@ -81,7 +81,8 @@ function parseClaim(input) {
 
 function parseExtract(input) {
   if (!input || typeof input !== 'object') throw bad('invalid_slide');
-  const { slide, text = '', notes = '', imageDataUrl = null } = input;
+  const { slide, text = '', notes = '', imageDataUrl = null, context = '' } = input;
+  if (typeof context !== 'string') throw bad('invalid_slide');
   if (!Number.isInteger(slide) || slide < 1 || slide > MAX_SLIDES) throw bad('invalid_slide');
   if (typeof text !== 'string' || typeof notes !== 'string') throw bad('invalid_slide');
   if (text.length > MAX_SLIDE_CHARS || notes.length > MAX_SLIDE_CHARS) throw bad('slide_too_long');
@@ -92,7 +93,7 @@ function parseExtract(input) {
     if (bytes > MAX_IMAGE_BYTES) throw bad('image_too_large');
     if (!IMAGE_RE.test(imageDataUrl)) throw bad('invalid_image');
   }
-  return { slide, text, notes, imageDataUrl };
+  return { slide, text, notes, imageDataUrl, context: context.slice(0, 500) };
 }
 
 async function readJsonBody(request) {

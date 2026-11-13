@@ -34,7 +34,7 @@ test('슬라이드 3장: 추출한 뒤 내용을 하나씩 검사하고 진행 �
   const out = await runCheck(slidesOf(3), domains, api, (e) => events.push(e));
 
   assert.equal(api.stats.extractCalls.length, 3);
-  assert.deepEqual(api.stats.extractCalls[0], { slide: 1, text: '1장 글자', notes: '1장 노트', imageDataUrl: null });
+  assert.deepEqual(api.stats.extractCalls[0], { slide: 1, text: '1장 글자', notes: '1장 노트', imageDataUrl: null, context: '1장 글자\n2장 글자\n3장 글자' });
   assert.equal(out.claims.length, 6);
   assert.equal(out.results.length, 6);
   assert.deepEqual(out.claims.map((c) => c.id), ['s1-c1', 's1-c2', 's2-c1', 's2-c2', 's3-c1', 's3-c2'], '슬라이드 순서대로');

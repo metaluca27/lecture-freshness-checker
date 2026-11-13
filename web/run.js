@@ -37,6 +37,9 @@ export async function runCheck(slides, domains, api, onProgress, options = {}) {
     }
   };
 
+  // 제품 이름이 없는 장도 검색어를 제대로 만들 수 있게, 자료 첫 부분을 주제로 함께 보낸다.
+  const context = slides.map((s) => (s.text ?? '').trim()).filter(Boolean).join('\n').slice(0, 300);
+
   // 1) 장마다 낡을 수 있는 내용을 뽑는다.
   const targets = slides.filter((s) => (s.text ?? '').trim() || (s.notes ?? '').trim() || (imageFor && s.images?.length));
   const bySlide = new Map();
@@ -52,7 +55,7 @@ export async function runCheck(slides, domains, api, onProgress, options = {}) {
           imageDataUrl = null; // 그림 준비에 실패해도 글자와 노트는 검사한다.
         }
       }
-      const out = await api.extract({ slide: s.slide, text: s.text ?? '', notes: s.notes ?? '', imageDataUrl });
+      const out = await api.extract({ slide: s.slide, text: s.text ?? '', notes: s.notes ?? '', imageDataUrl, context });
       bySlide.set(s.slide, Array.isArray(out?.claims) ? out.claims : []);
     } catch {
       failedSlides.push(s.slide);

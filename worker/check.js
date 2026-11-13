@@ -10,7 +10,7 @@ import { excerptFor } from './page.js';
 import { finalize, unverified } from './verdict.js';
 
 const MAX_OFFICIAL_PAGES = 3;
-const MAX_REFERENCES = 5;
+const MAX_REFERENCES = 3;
 const EXCERPT_CHARS = 12000;
 
 // 같은 페이지를 주소만 조금 달리 여러 번 세지 않게 한다(끝 빗금, ?hl=ko 같은 꼬리 무시).
