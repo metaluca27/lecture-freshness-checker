@@ -85,7 +85,10 @@ async function handleFile(file) {
 
   // 주제를 보고 공식 사이트를 제안받는다. 실패해도 직접 적으면 된다.
   try {
-    const sample = slides.map((s) => s.text).join('\n').slice(0, 3000);
+    // 글자가 그림으로만 들어 있는 자료도 있어서, 글자가 적으면 발표 노트도 함께 보낸다.
+    const texts = slides.map((s) => s.text).filter((t) => t.trim()).join('\n');
+    const notes = slides.map((s) => s.notes).filter((t) => t.trim()).join('\n');
+    const sample = (texts.length >= 200 ? texts : `${texts}\n${notes}`).trim().slice(0, 3000);
     let out = await callApi('/api/suggest-sites', { sample });
     if (!out.tier1?.length) out = await callApi('/api/suggest-sites', { sample }); // 빈 제안이면 한 번 더 묻는다
     if (!$('tier1').value) $('tier1').value = (out.tier1 ?? []).join(', ');
@@ -121,7 +124,7 @@ function updateStart() {
   const ready = Boolean(domains && $('confirm').checked);
   $('start').disabled = !ready;
   let hint = '';
-  if (error) hint = error.startsWith('공식 사이트를 하나') ? '먼저 위의 "공식 사이트" 칸에 도메인을 적어 주세요. 예: notebooklm.google.com' : error;
+  if (error) hint = error.startsWith('공식 사이트를 하나') ? '먼저 위의 "공식 사이트" 칸에 도메인을 적어 주세요. 예: example.com' : error;
   else if (!$('confirm').checked) hint = '사이트가 맞는지 확인하고 위의 확인란에 표시해 주세요.';
   $('start-hint').textContent = hint;
 }
@@ -189,10 +192,44 @@ function renderResult() {
   if (failedSlides.length) notes.push(`슬라이드 ${failedSlides.join(', ')}장은 내용을 고르지 못했어요.`);
   if (claims.length === 0 && !stopped) notes.push('낡을 수 있는 내용(버전, 요금, 숫자, 날짜, 메뉴, 기능)을 찾지 못했어요.');
   setStatus('result-notes', notes.join(' '));
+  renderSiteTip(results);
 
   state.filter = sum.changed > 0 ? 'changed' : 'all';
   renderFilters(sum);
   renderCards();
+}
+
+// 공식 사이트에서 아무것도 못 찾은 내용이 많으면, 적어 둔 공식 사이트가 틀렸을 가능성이 크다.
+// 검색에 자주 나온 사이트를 후보로 보여 주되, 공식인지 판단하고 추가하는 일은 사용자가 한다.
+function renderSiteTip(results) {
+  const tip = $('site-tip');
+  const missed = results.filter((r) => r.reason === 'no_official_source');
+  if (results.length === 0 || missed.length < Math.max(3, results.length / 2)) {
+    tip.hidden = true;
+    return;
+  }
+  const counts = new Map();
+  for (const r of missed) {
+    for (const host of new Set((r.references ?? []).map((x) => x.hostname))) counts.set(host, (counts.get(host) ?? 0) + 1);
+  }
+  const top = [...counts.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const back = el('button', { type: 'button', class: 'primary', text: '공식 사이트 고치고 다시 검사' });
+  back.addEventListener('click', () => {
+    $('confirm').checked = false;
+    updateStart();
+    setStatus('sites-status', `${state.fileName} · 슬라이드 ${state.slides.length}장. 공식 사이트를 고친 뒤 다시 확인해 주세요.`);
+    show('step-sites');
+    $('tier1').focus();
+  });
+
+  tip.replaceChildren(
+    el('p', { class: 'tip-title', text: `${missed.length}개 내용은 적어 주신 공식 사이트(${state.domains.tier1.join(', ')})에서 아무것도 찾지 못했어요.` }),
+    el('p', { text: '공식 사이트 주소가 바뀌었거나 다르게 적혔을 수 있어요. 제품 이름이 바뀌면 주소도 함께 바뀌곤 해요.' }),
+    top.length ? el('p', {}, ['검색에 자주 나온 사이트: ', ...top.flatMap(([host, n], i) => [i ? ', ' : '', el('strong', { text: host }), ` (${n}번)`]), '. 이 가운데 공식 사이트가 있는지 직접 확인해 주세요. 블로그나 커뮤니티일 수도 있어요.']) : null,
+    back,
+  );
+  tip.hidden = false;
 }
 
 function stat(kind, number, label) {

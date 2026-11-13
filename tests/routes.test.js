@@ -156,6 +156,24 @@ test('/api/suggest-sites: 모델 제안을 도메인 모양으로 다듬어 돌�
   assert.ok(out.tier2.every((d) => /^[a-z0-9.-]+$/.test(d)));
 });
 
+test('/api/suggest-sites: 자료 제목으로 먼저 검색하고, 나온 사이트를 모델에 함께 보여 준다', async () => {
+  const f = fakes({ results: [{ url: 'https://notebook.google.com/', title: 'Gemini Notebook - Google', hostname: 'notebook.google.com' }] });
+  const res = await makeWorker(f).fetch(post('/api/suggest-sites', { sample: '제미나이 노트북\nGEMINI NOTEBOOK\n사용법' }), env);
+  assert.equal(res.status, 200);
+  assert.equal(f.log.search.length, 1);
+  assert.match(f.log.search[0], /제미나이 노트북 GEMINI NOTEBOOK 사용법 공식 사이트/);
+  const shown = f.log.chat[0].messages.map((m) => m.content).join('\n');
+  assert.match(shown, /<search_results>\n- notebook\.google\.com · Gemini Notebook - Google\n<\/search_results>/);
+});
+
+test('/api/suggest-sites: 검색이 실패해도 제안은 계속한다', async () => {
+  const f = fakes();
+  f.search = async () => { throw new Error('search down'); };
+  const res = await makeWorker(f).fetch(post('/api/suggest-sites', { sample: '안티그라비티 강의' }), env);
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).tier1, ['antigravity.google']);
+});
+
 test('/api/suggest-sites: sample 이 없으면 400', async () => {
   const w = makeWorker(fakes());
   assert.equal((await w.fetch(post('/api/suggest-sites', {}), env)).status, 400);

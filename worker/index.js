@@ -154,7 +154,16 @@ export function makeWorker(deps = {}) {
   const routes = {
     '/api/suggest-sites': async (body, env) => {
       if (typeof body.sample !== 'string' || !body.sample.trim()) throw bad('invalid_sample');
-      const out = await chatJson(suggestSitesMessages(body.sample), env, { schema: SITES_SCHEMA, schemaName: 'sites', maxTokens: 400 });
+      // 모델의 기억만 믿지 않고, 자료 제목으로 먼저 검색해서 지금 실제로 나오는 사이트를 함께 보여 준다.
+      // (제품 이름이나 주소가 바뀐 경우를 잡기 위해서다.) 검색이 실패해도 제안은 계속한다.
+      const title = body.sample.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 4).join(' ').slice(0, 120);
+      let hits = [];
+      try {
+        hits = await search(`${title} 공식 사이트`, env, { maxResults: 8 });
+      } catch {
+        hits = [];
+      }
+      const out = await chatJson(suggestSitesMessages(body.sample, hits), env, { schema: SITES_SCHEMA, schemaName: 'sites', maxTokens: 400 });
       const clean = (list, max) => [...new Set((Array.isArray(list) ? list : []).map(cleanDomain).filter(Boolean))].slice(0, max);
       const tier1 = clean(out?.tier1, MAX_TIER1);
       const tier2 = clean(out?.tier2, MAX_TIER2 + MAX_TIER1).filter((d) => !tier1.includes(d)).slice(0, MAX_TIER2);

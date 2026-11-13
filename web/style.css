@@ -131,6 +131,10 @@ button.ghost:hover { background: #f1ede3; }
 .stat.unverified { background: var(--unverified-bg); border-color: #d8dde5; }
 .stat.unverified .n { color: var(--unverified); }
 
+.tip { margin: 16px 0 0; padding: 16px 18px; border-radius: 12px; background: #fbf3dc; border: 1px solid #ecd9a0; color: #4d3d0d; font-size: 15px; }
+.tip p { margin: 0 0 8px; }
+.tip .tip-title { font-weight: 700; }
+.tip button { margin-top: 6px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin: 18px 0; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; }
 .filters button { padding: 7px 14px; min-height: 38px; border-radius: 999px; background: transparent; border-color: #cfc7b6; font-size: 14px; }
