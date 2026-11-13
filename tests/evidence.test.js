@@ -18,6 +18,8 @@ const cases = [
   ['Markdown 강조 기호 차이는 무시한다', 'The Pro plan costs $19.99 per month', 'The **Pro** plan costs `$19.99` per month', true],
   ['둥근 따옴표와 곧은 따옴표는 같게 본다', "it's called \"Agent Manager\"", 'it’s called “Agent Manager” now', true],
   ['끊기지 않는 공백도 공백으로 본다', 'Version 2.31 released', 'Version 2.31 released today', true],
+  ['Markdown 링크와 제목 표시는 보이는 글자만 비교한다', 'v2.31.2 Latest November 11, 2026', '---\n\n### [v2.31.2](/releases?tab=hub&version=2.31.2 "View release 2.31.2")\n\nLatest\n\nNovember 11, 2026\n\n### Gemini', true],
+  ['링크 주소 안에만 있는 글자는 근거가 아니다', 'releases?tab=hub', 'see [v2.31.2](/releases?tab=hub&version=2.31.2) today', false],
   ['앞 일치가 끊겨도 뒤에 온전한 일치가 있으면 참', 'Version 2.28', 'Version 2.28.2 replaced Version 2.28 last week', true],
 ];
 

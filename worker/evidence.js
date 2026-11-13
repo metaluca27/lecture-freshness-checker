@@ -15,6 +15,8 @@ export function normalizeText(text) {
     .replace(/[‘’‚′]/g, "'")
     .replace(/[“”„″]/g, '"')
     .replace(/[‐-―−]/g, '-')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // Markdown 링크는 보이는 글자만 남긴다
+    .replace(/^#{1,6}\s+/gm, '') // Markdown 제목 표시
     .replace(/[*`]/g, '') // Markdown 강조, 코드 표시
     .replace(/\s+/g, ' ')
     .trim()
