@@ -1,12 +1,14 @@
 {
   "name": "lecture-freshness-checker",
   "version": "0.1.0",
-  "description": "강의 PPT의 낡은 내용을 공식 문서와 대조해 짚어 주는 검사기",
+  "description": "강의 자료(PPT, PDF)의 낡은 내용을 공식 문서와 대조해 짚어 주는 검사기",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test \"tests/*.test.js\"",
-    "dev": "wrangler dev --config worker/wrangler.toml",
+    "dev": "wrangler dev --config worker/wrangler.toml --port 8798",
+    "web": "node scripts/serve-web.js",
+    "eval": "node eval/run-deck-eval.js --runs 3",
     "deploy": "wrangler deploy --config worker/wrangler.toml"
   },
   "devDependencies": {
