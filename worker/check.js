@@ -31,6 +31,15 @@ function hostnameOf(url) {
   }
 }
 
+// 공식 도메인 아래에 있는 사용자 게시판·커뮤니티 글인가. (예: support.google.com/…/thread/…)
+export function isUserGenerated(url) {
+  try {
+    return /\/(thread|threads|community|communities|forum|forums|discussions?|questions?)(\/|$)/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 // 본문에서 조각을 고를 때 쓸 낱말
 function termsOf(claim) {
   const fromKeywords = Array.isArray(claim.keywords) ? claim.keywords.filter((k) => typeof k === 'string') : [];
@@ -52,11 +61,14 @@ export async function checkClaim(claim, domains, deps) {
     if (!claim || typeof claim.text !== 'string' || !claim.text.trim()) return done(unverified('api_error'));
 
     const query = typeof claim.query === 'string' && claim.query.trim() ? claim.query.trim() : claim.text.trim();
-    const tier1 = Array.isArray(domains?.tier1) ? domains.tier1.filter((d) => typeof d === 'string' && d.trim()) : [];
+    const listOf = (v) => (Array.isArray(v) ? v.filter((d) => typeof d === 'string' && d.trim()).map((d) => d.trim()) : []);
+    const officialDomains = [...new Set([...listOf(domains?.tier1), ...listOf(domains?.tier2)])];
 
-    // 1) 검색 두 번: 공식 사이트 한정(판정 근거용)과 일반(참고 출처용)
+    // 1) 검색 두 번: 공식 사이트 한정(판정 근거용)과 일반(참고 출처용).
+    //    공식 사이트가 여러 곳이면 한 번에 묶어 찾는다.
     const queries = [query];
-    if (tier1.length > 0) queries.unshift(`site:${tier1[0].trim()} ${query}`);
+    if (officialDomains.length === 1) queries.unshift(`site:${officialDomains[0]} ${query}`);
+    else if (officialDomains.length > 1) queries.unshift(`(${officialDomains.map((d) => `site:${d}`).join(' OR ')}) ${query}`);
     const settled = await Promise.allSettled(queries.map((q) => deps.search(q)));
     if (settled.every((s) => s.status === 'rejected')) return done(unverified('api_error'));
 
@@ -68,7 +80,9 @@ export async function checkClaim(claim, domains, deps) {
         const key = r && typeof r.url === 'string' ? pageKey(r.url) : null;
         if (!key || seen.has(key)) continue;
         seen.add(key);
-        hits.push({ url: r.url, title: typeof r.title === 'string' ? r.title : '', tier: tierOf(r.url, domains) });
+        // 공식 도메인 안에 있어도 사용자들이 쓴 글(질문 게시판 등)은 공식 문서가 아니다.
+        const tier = isUserGenerated(r.url) ? 3 : tierOf(r.url, domains);
+        hits.push({ url: r.url, title: typeof r.title === 'string' ? r.title : '', tier });
       }
     }
 
@@ -88,7 +102,7 @@ export async function checkClaim(claim, domains, deps) {
     const pages = fetched
       .filter((f) => f.status === 'fulfilled' && f.value && typeof f.value.text === 'string' && f.value.text)
       .map((f) => f.value)
-      .filter((p) => tierOf(p.url, domains) < 3); // 다른 곳으로 넘겨진 페이지는 뺀다
+      .filter((p) => tierOf(p.url, domains) < 3 && !isUserGenerated(p.url)); // 다른 곳으로 넘겨진 페이지는 뺀다
     if (pages.length === 0) return done(unverified('page_unreadable'), references);
 
     // 4) 모델 판정. 긴 본문은 낱말 주변 조각만 준다.

@@ -152,9 +152,25 @@ test('공식 사이트 한정 검색과 일반 검색을 함께 하고, 공식 �
   const deps = makeDeps({ results: many, pages, judgement: { verdict: 'unverified', evidence: [], suggestion: null, humanTask: null } });
   await checkClaim(claim, domains, deps);
   assert.equal(deps.log.searches.length, 2);
-  assert.ok(deps.log.searches.some((q) => q.startsWith('site:antigravity.google ')));
+  assert.ok(deps.log.searches.includes(`(site:antigravity.google OR site:cloud.google.com) ${claim.query}`), '공식 사이트를 한 번에 묶어 찾는다');
   assert.ok(deps.log.searches.includes(claim.query));
   assert.deepEqual(deps.log.fetched.sort(), ['https://antigravity.google/a', 'https://antigravity.google/b', 'https://antigravity.google/c']);
+});
+
+test('공식 사이트가 한 곳이면 site: 하나로 찾는다', async () => {
+  const deps = makeDeps({ results: [] });
+  await checkClaim(claim, { tier1: ['antigravity.google'], tier2: [] }, deps);
+  assert.ok(deps.log.searches.includes(`site:antigravity.google ${claim.query}`));
+});
+
+test('공식 도메인 아래의 사용자 게시판 글은 근거로 쓰지 않고 열지도 않는다', async () => {
+  const thread = 'https://cloud.google.com/gemini/thread/390071243';
+  const deps = makeDeps({ results: [hit(thread, '사용자 질문')], pages: { [thread]: 'I think it has 60 plugins.' } });
+  const r = await checkClaim(claim, domains, deps);
+  assert.equal(r.verdict, 'unverified');
+  assert.equal(r.reason, 'no_official_source');
+  assert.equal(deps.log.fetched.length, 0);
+  assert.equal(r.references[0].url, thread);
 });
 
 test('같은 페이지가 주소만 조금 달라 여러 번 나와도 한 번만 읽는다', async () => {

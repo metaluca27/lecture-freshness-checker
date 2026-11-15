@@ -1,0 +1,42 @@
+{
+  "about": "가상의 사내 교육자료. 회사와 사람은 지어낸 것이고, 내용은 공개된 공식 문서로 확인할 수 있는 도구 안내다. 일부러 낡은 정보를 심어 두고 검사기가 잡아내는지 잰다. 정답은 2026-11-15에 공식 문서 본문에서 직접 확인했다.",
+  "fileName": "한빛물산_신입사원_AI도구_안내.pptx",
+  "domains": { "tier1": ["antigravity.google", "notebook.google.com"], "tier2": ["support.google.com"] },
+  "slides": [
+    {
+      "text": ["한빛물산 2026 하반기 신입사원 교육", "업무용 AI 도구 사용 안내", "Google Antigravity 와 Gemini Notebook", "인재개발팀"],
+      "notes": ["오늘은 회사에서 쓰는 AI 도구 두 가지를 설치부터 요금제까지 안내합니다."]
+    },
+    {
+      "text": ["1. 안티그라비티 설치", "안티그라비티 데스크톱 앱(Antigravity App)은 macOS 12(Monterey) 이상에서 설치할 수 있어요", "윈도우는 Windows 10(64비트)과 Windows 11을 지원해요", "현재 안티그라비티 앱 최신 버전은 2.28이에요"],
+      "notes": ["설치가 안 되면 IT지원팀 내선으로 연락하세요."]
+    },
+    {
+      "text": ["2. 안티그라비티 요금제와 사용량", "개인 계정은 월 0달러로 시작할 수 있어요", "Google AI Pro 요금제의 사용량은 24시간마다 다시 채워져요"],
+      "notes": ["팀 계정 신청은 다음 달부터 받습니다."]
+    },
+    {
+      "text": ["3. 제미나이 노트북 한도", "무료 요금제는 노트북을 100개까지 만들 수 있어요", "무료 요금제는 노트북 하나에 자료를 30개까지 넣을 수 있어요"],
+      "notes": ["회의록 정리에 써 보세요."]
+    },
+    {
+      "text": ["4. 플러그인", "안티그라비티 플러그인은 Customizations 의 Marketplace 에서 추가해요", "안티그라비티 마켓플레이스에는 플러그인이 모두 60개 있어요"],
+      "notes": ["플러그인은 필요한 것만 켜 두세요."]
+    },
+    {
+      "text": ["5. 꼭 지켜 주세요", "고객 정보가 든 파일은 AI 도구에 올리지 않아요", "AI가 만든 결과는 반드시 사람이 확인해요", "궁금한 점은 인재개발팀에 물어보세요"],
+      "notes": ["보안 서약서는 교육 뒤에 제출합니다."]
+    }
+  ],
+  "planted": [
+    { "key": "macos", "slide": 2, "match": "macOS\\s*12|Monterey", "expected": "changed", "truth": "Antigravity App 은 macOS 13 (Ventura) or later. 다른 형태(IDE 등)의 요건은 macOS 12+ 라서, 앱이라고 밝혀 적었다", "source": "https://antigravity.google/docs/getting-started" },
+    { "key": "windows", "slide": 2, "match": "Windows\\s*10", "expected": "same", "truth": "Windows 10 (64-bit) or Windows 11", "source": "https://antigravity.google/docs/getting-started" },
+    { "key": "version", "slide": 2, "match": "2\\.28", "expected": "changed", "truth": "v2.32.0 이 Latest (2026-11-13)", "source": "https://antigravity.google/docs/changelog" },
+    { "key": "free", "slide": 3, "match": "0달러", "expected": "same", "truth": "For Individuals $0/month", "source": "https://antigravity.google/pricing" },
+    { "key": "refresh", "slide": 3, "match": "24시간", "expected": "changed", "truth": "A high, generous quota, refreshed every five hours until the weekly limit is reached", "source": "https://antigravity.google/docs/plans" },
+    { "key": "notebooks", "slide": 4, "match": "100개", "expected": "same", "truth": "Notebooks 100/user", "source": "https://support.google.com/gemininotebook/answer/16213268" },
+    { "key": "sources", "slide": 4, "match": "30개", "expected": "changed", "truth": "All sources except notes 50/notebook", "source": "https://support.google.com/gemininotebook/answer/16213268" },
+    { "key": "marketplace", "slide": 5, "match": "Marketplace", "expected": "same", "truth": "Customizations > Marketplace", "source": "https://antigravity.google/docs/plugins" },
+    { "key": "count60", "slide": 5, "match": "60개", "expected": "unverified", "truth": "공식 문서에 플러그인 개수가 없다", "source": "https://antigravity.google/docs/marketplace" }
+  ]
+}
