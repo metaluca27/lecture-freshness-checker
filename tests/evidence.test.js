@@ -67,3 +67,10 @@ test('missingNumbers 는 근거 문장에 없는 숫자를 돌려준다', () => 
   assert.deepEqual(missingNumbers('최신 버전은 2.31', ['v2.31.2 Latest']), ['2.31'], '버전은 통째로 같아야 한다');
   assert.deepEqual(missingNumbers('숫자가 없는 문장', []), []);
 });
+
+test('연도와 달을 점으로 이은 날짜(2025.11)는 연도와 달로 나눠 본다', () => {
+  assert.deepEqual(numbersIn('2025.11 첫 공개'), ['2025', '11']);
+  assert.deepEqual(numbersIn('2026.5 안티그라비티 2.0'), ['2026', '5', '2']);
+  assert.deepEqual(missingNumbers('2025.11 첫 공개 제미나이 3와 함께', ['Released on November 18, 2025 alongside Gemini 3']), []);
+  assert.deepEqual(numbersIn('버전 2.28 과 2.31.2'), ['2.28', '2.31.2'], '버전 번호는 건드리지 않는다');
+});

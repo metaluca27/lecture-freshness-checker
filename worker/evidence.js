@@ -79,6 +79,8 @@ export function numbersIn(text, { words = false } = {}) {
   if (typeof text !== 'string') return [];
   let s = text.normalize('NFKC').toLowerCase();
   if (words) s = s.replace(/[a-z]+/g, (w) => (Object.hasOwn(NUMBER_WORDS, w) ? String(NUMBER_WORDS[w]) : w));
+  // '2025.11' 이나 '2026.5' 처럼 연도와 달을 점으로 이은 날짜는 두 숫자로 나눠 본다.
+  s = s.replace(/(?<!\d)((?:19|20)\d{2})\.(0?[1-9]|1[0-2])(?![\d.])/g, '$1 $2');
   const out = [];
   for (const m of s.matchAll(/\d[\d,]*(?:\.\d+)*/g)) {
     const raw = m[0].replace(/,(?=\d)/g, '').replace(/[,.]+$/, '');
