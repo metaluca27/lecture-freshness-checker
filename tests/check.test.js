@@ -151,10 +151,64 @@ test('공식 사이트 한정 검색과 일반 검색을 함께 하고, 공식 �
   const pages = Object.fromEntries(many.map((h) => [h.url, 'Some official text that is long enough.']));
   const deps = makeDeps({ results: many, pages, judgement: { verdict: 'unverified', evidence: [], suggestion: null, humanTask: null } });
   await checkClaim(claim, domains, deps);
-  assert.equal(deps.log.searches.length, 2);
+  assert.equal(deps.log.searches.length, 3, '첫 검색 두 번과 재검색 한 번');
   assert.ok(deps.log.searches.includes(`(site:antigravity.google OR site:cloud.google.com) ${claim.query}`), '공식 사이트를 한 번에 묶어 찾는다');
   assert.ok(deps.log.searches.includes(claim.query));
   assert.deepEqual(deps.log.fetched.sort(), ['https://antigravity.google/a', 'https://antigravity.google/b', 'https://antigravity.google/c']);
+});
+
+test('근거를 못 찾으면 본문 낱말로 한 번 더 검색해 아직 안 읽은 공식 페이지를 본다', async () => {
+  const LIMITS = 'https://antigravity.google/docs/limits';
+  const deps = makeDeps({
+    results: (q) => (q.includes('plugins 60 Marketplace') ? [hit(T1), hit(LIMITS)] : [hit(T1), hit(GH, 'gh')]),
+    pages: { [T1]: 'Plugins extend Antigravity in many ways.', [LIMITS]: 'The Marketplace lists 54 plugins today.' },
+    judgement: (c, shown) => (shown.some((p) => p.url === LIMITS)
+      ? { verdict: 'changed', evidence: [{ url: LIMITS, quote: 'The Marketplace lists 54 plugins today', stance: 'changed' }], suggestion: '54개로 고쳐요.', humanTask: null }
+      : { verdict: 'unverified', evidence: [], suggestion: null, humanTask: '직접 확인' }),
+  });
+  const r = await checkClaim(claim, domains, deps);
+  assert.equal(r.verdict, 'changed');
+  assert.equal(r.evidence[0].url, LIMITS);
+  assert.equal(deps.log.searches.length, 3);
+  assert.equal(deps.log.searches[2], '(site:antigravity.google OR site:cloud.google.com) plugins 60 Marketplace');
+  assert.deepEqual(deps.log.fetched, [T1, LIMITS], '이미 읽은 페이지는 다시 읽지 않는다');
+  assert.equal(deps.log.judged.length, 2);
+  assert.equal(r.references[0].url, GH, '참고 출처는 첫 검색 것을 그대로 둔다');
+});
+
+test('재검색에서도 근거가 없으면 확인 못 함으로 두고, 처음 판정의 할 일 문구를 지킨다', async () => {
+  const OTHER = 'https://antigravity.google/docs/other';
+  const deps = makeDeps({
+    results: (q) => (q.includes('plugins 60 Marketplace') ? [hit(OTHER)] : [hit(T1)]),
+    pages: { [T1]: 'Plugins extend Antigravity in many ways.', [OTHER]: 'Nothing about counts on this page either.' },
+    judgement: { verdict: 'unverified', evidence: [], suggestion: null, humanTask: '마켓플레이스에서 직접 세어 보세요.' },
+  });
+  const r = await checkClaim(claim, domains, deps);
+  assert.equal(r.verdict, 'unverified');
+  assert.equal(r.humanTask, '마켓플레이스에서 직접 세어 보세요.');
+  assert.equal(deps.log.judged.length, 2);
+});
+
+test('재검색은 한 번만 한다. 낱말이 없거나 새 페이지가 없으면 하지 않는다', async () => {
+  const noKeywords = makeDeps({ results: [hit(T1)], pages: { [T1]: 'Plugins extend Antigravity.' }, judgement: { verdict: 'unverified', evidence: [], suggestion: null, humanTask: null } });
+  await checkClaim({ ...claim, keywords: [] }, domains, noKeywords);
+  assert.equal(noKeywords.log.searches.length, 2);
+  assert.equal(noKeywords.log.judged.length, 1);
+
+  const samePages = makeDeps({ results: [hit(T1)], pages: { [T1]: 'Plugins extend Antigravity.' }, judgement: { verdict: 'unverified', evidence: [], suggestion: null, humanTask: null } });
+  await checkClaim(claim, domains, samePages);
+  assert.equal(samePages.log.searches.length, 3);
+  assert.equal(samePages.log.judged.length, 1, '새로 읽을 페이지가 없으면 모델을 다시 부르지 않는다');
+});
+
+test('첫 판정이 그대로나 바뀜이면 재검색하지 않는다', async () => {
+  const deps = makeDeps({
+    results: [hit(T1)],
+    pages: { [T1]: 'The Marketplace lists 60 plugins today.' },
+    judgement: { verdict: 'same', evidence: [{ url: T1, quote: 'The Marketplace lists 60 plugins today', stance: 'same' }], suggestion: null, humanTask: null },
+  });
+  await checkClaim(claim, domains, deps);
+  assert.equal(deps.log.searches.length, 2);
 });
 
 test('공식 사이트가 한 곳이면 site: 하나로 찾는다', async () => {

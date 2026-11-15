@@ -7,7 +7,7 @@
 // 가져온 페이지(fetchedPages) 형식: [{ url, text }]
 
 import { tierOf } from './tiers.js';
-import { quoteInPage } from './evidence.js';
+import { quoteInPage, missingNumbers } from './evidence.js';
 
 const HUMAN_TASKS = {
   no_official_source: '공식 사이트에서는 근거를 찾지 못했어요. 공식 문서를 직접 열어 확인해 주세요.',
@@ -46,9 +46,10 @@ function hostnameOf(url) {
  * @param {unknown} modelJudgement 모델이 돌려준 판정
  * @param {Array<{url: string, text: string}>} fetchedPages 워커가 실제로 가져온 본문
  * @param {{ tier1?: string[], tier2?: string[] }} domains
+ * @param {string} claimText 슬라이드 문장. 주면 "그대로" 판정에서 숫자가 근거에 다 있는지 확인한다
  * @returns {{ verdict: string, evidence: Array, suggestion: string|null, humanTask: string|null, reason: string|null }}
  */
-export function finalize(modelJudgement, fetchedPages, domains) {
+export function finalize(modelJudgement, fetchedPages, domains, claimText = '') {
   const j = modelJudgement;
   if (!j || typeof j !== 'object' || Array.isArray(j)) return unverified('no_matching_quote');
   if (!['same', 'changed', 'unverified'].includes(j.verdict)) return unverified('no_matching_quote');
@@ -99,6 +100,12 @@ export function finalize(modelJudgement, fetchedPages, domains) {
     const suggestion = typeof j.suggestion === 'string' ? j.suggestion.trim() : '';
     if (!suggestion) return unverified('no_matching_quote');
     return { verdict: 'changed', evidence, suggestion, humanTask: null, reason: null };
+  }
+
+  // "그대로"는 슬라이드 문장의 숫자가 근거 문장에 모두 있을 때만 인정한다.
+  const missing = missingNumbers(claimText, evidence.map((e) => e.quote));
+  if (missing.length > 0) {
+    return unverified('no_matching_quote', `근거 문장에서 ${missing.join(', ')} 을(를) 확인하지 못했어요. 이 숫자가 지금도 맞는지 공식 문서에서 직접 확인해 주세요.`);
   }
 
   return { verdict: 'same', evidence, suggestion: null, humanTask: null, reason: null };

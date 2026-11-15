@@ -66,9 +66,11 @@ export async function checkClaim(claim, domains, deps) {
 
     // 1) 검색 두 번: 공식 사이트 한정(판정 근거용)과 일반(참고 출처용).
     //    공식 사이트가 여러 곳이면 한 번에 묶어 찾는다.
+    let siteFilter = '';
+    if (officialDomains.length === 1) siteFilter = `site:${officialDomains[0]}`;
+    else if (officialDomains.length > 1) siteFilter = `(${officialDomains.map((d) => `site:${d}`).join(' OR ')})`;
     const queries = [query];
-    if (officialDomains.length === 1) queries.unshift(`site:${officialDomains[0]} ${query}`);
-    else if (officialDomains.length > 1) queries.unshift(`(${officialDomains.map((d) => `site:${d}`).join(' OR ')}) ${query}`);
+    if (siteFilter) queries.unshift(`${siteFilter} ${query}`);
     const settled = await Promise.allSettled(queries.map((q) => deps.search(q)));
     if (settled.every((s) => s.status === 'rejected')) return done(unverified('api_error'));
 
@@ -95,28 +97,63 @@ export async function checkClaim(claim, domains, deps) {
       .filter((h) => h.tier < 3)
       .sort((a, b) => a.tier - b.tier)
       .slice(0, MAX_OFFICIAL_PAGES);
-    if (official.length === 0) return done(unverified('no_official_source'), references);
-
-    // 3) 공식 본문 읽기
-    const fetched = await Promise.allSettled(official.map((h) => deps.fetchPage(h.url)));
-    const pages = fetched
-      .filter((f) => f.status === 'fulfilled' && f.value && typeof f.value.text === 'string' && f.value.text)
-      .map((f) => f.value)
-      .filter((p) => tierOf(p.url, domains) < 3 && !isUserGenerated(p.url)); // 다른 곳으로 넘겨진 페이지는 뺀다
-    if (pages.length === 0) return done(unverified('page_unreadable'), references);
-
-    // 4) 모델 판정. 긴 본문은 낱말 주변 조각만 준다.
     const terms = termsOf(claim);
-    const shown = pages.map((p) => ({ url: p.url, text: excerptFor(p.text, terms, { maxChars: EXCERPT_CHARS }) }));
-    let judgement;
-    try {
-      judgement = await deps.judge(claim, shown);
-    } catch {
-      return done(unverified('api_error'), references);
+
+    // 공식 페이지를 읽고 모델에 판정을 맡긴 뒤 코드 규칙으로 최종 판정한다.
+    // allPages 는 지금까지 읽은 공식 본문 전체다(근거 대조는 조각이 아니라 본문 전체로 한다).
+    const allPages = [];
+    const judgeWith = async (candidates) => {
+      const fetched = await Promise.allSettled(candidates.map((h) => deps.fetchPage(h.url)));
+      const pages = fetched
+        .filter((f) => f.status === 'fulfilled' && f.value && typeof f.value.text === 'string' && f.value.text)
+        .map((f) => f.value)
+        .filter((p) => tierOf(p.url, domains) < 3 && !isUserGenerated(p.url)); // 다른 곳으로 넘겨진 페이지는 뺀다
+      if (pages.length === 0) return unverified('page_unreadable');
+      allPages.push(...pages);
+      // 긴 본문은 낱말 주변 조각만 모델에 준다.
+      const shown = pages.map((p) => ({ url: p.url, text: excerptFor(p.text, terms, { maxChars: EXCERPT_CHARS }) }));
+      let judgement;
+      try {
+        judgement = await deps.judge(claim, shown);
+      } catch {
+        return unverified('api_error');
+      }
+      return finalize(judgement, allPages, domains, claim.text);
+    };
+
+    // 3) 첫 판정
+    let result = official.length === 0 ? unverified('no_official_source') : await judgeWith(official);
+
+    // 4) 근거를 못 찾았으면 한 번만 더 찾아본다. 검색어를 본문에 나올 법한 낱말로 바꿔
+    //    아직 읽지 않은 공식 페이지를 찾는다. 그래도 없으면 확인 못 함으로 둔다.
+    const retryable = result.verdict === 'unverified' && ['no_matching_quote', 'no_official_source', 'page_unreadable'].includes(result.reason);
+    const keywords = Array.isArray(claim.keywords) ? claim.keywords.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim()) : [];
+    const retryQuery = keywords.slice(0, 5).join(' ');
+    if (retryable && siteFilter && keywords.length >= 2 && retryQuery.toLowerCase() !== query.toLowerCase()) {
+      let more = [];
+      try {
+        more = await deps.search(`${siteFilter} ${retryQuery}`);
+      } catch {
+        more = [];
+      }
+      const fresh = [];
+      for (const r of Array.isArray(more) ? more : []) {
+        const key = r && typeof r.url === 'string' ? pageKey(r.url) : null;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        if (isUserGenerated(r.url)) continue;
+        const tier = tierOf(r.url, domains);
+        if (tier < 3) fresh.push({ url: r.url, tier });
+      }
+      fresh.sort((a, b) => a.tier - b.tier);
+      if (fresh.length > 0) {
+        const second = await judgeWith(fresh.slice(0, MAX_OFFICIAL_PAGES));
+        if (second.verdict !== 'unverified') result = second;
+        else if (result.reason !== 'no_matching_quote' && second.reason === 'no_matching_quote') result = second;
+      }
     }
 
-    // 5) 코드 규칙으로 최종 판정. 근거 대조는 조각이 아니라 본문 전체로 한다.
-    return done(finalize(judgement, pages, domains), references);
+    return done(result, references);
   } catch {
     return done(unverified('api_error'));
   }

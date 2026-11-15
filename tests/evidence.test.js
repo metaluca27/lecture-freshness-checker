@@ -38,3 +38,32 @@ test('문자열이 아닌 값이 와도 예외 없이 거짓', () => {
 test('normalizeText 는 공백을 하나로 줄이고 소문자로 만든다', () => {
   assert.equal(normalizeText('  Hello\n\n  WORLD\t!  '), 'hello world !');
 });
+
+// ---------- 숫자 대조 ----------
+import { numbersIn, missingNumbers } from '../worker/evidence.js';
+
+test('numbersIn 은 쉼표 든 숫자, 소수, 버전 번호를 가려 모은다', () => {
+  assert.deepEqual(numbersIn('월 7,500원, 약 29,000원에 $19.99'), ['7500', '29000', '19.99']);
+  assert.deepEqual(numbersIn('최신 버전은 2.31.2 예요. 2.28 이 아니에요.'), ['2.31.2', '2.28']);
+  assert.deepEqual(numbersIn('Windows 10(64비트)과 Windows 11'), ['10', '64', '11']);
+  assert.deepEqual(numbersIn('숫자가 없는 문장'), []);
+  assert.deepEqual(numbersIn(null), []);
+});
+
+test('numbersIn 은 요청하면 영어 숫자 낱말과 달 이름도 숫자로 읽는다', () => {
+  assert.deepEqual(numbersIn('refreshed every five hours', { words: true }), ['5']);
+  assert.deepEqual(numbersIn('Jul 16, 2026', { words: true }), ['7', '16', '2026']);
+  assert.deepEqual(numbersIn('starting on September 2.', { words: true }), ['9', '2']);
+  assert.deepEqual(numbersIn('Four times higher than standard limits', { words: true }), ['4']);
+  assert.deepEqual(numbersIn('refreshed every five hours'), [], '기본은 낱말을 숫자로 읽지 않는다');
+});
+
+test('missingNumbers 는 근거 문장에 없는 숫자를 돌려준다', () => {
+  assert.deepEqual(missingNumbers('무료는 노트북 100개, 노트북당 소스 50개', ['Notebooks 100/user', 'All sources except notes 50/notebook']), []);
+  assert.deepEqual(missingNumbers('Ultra: 월 119,000원 또는 300,000원, 노트북 500개', ['Notebooks 100/user 200/user 500/user']), ['119000', '300000']);
+  assert.deepEqual(missingNumbers('5시간마다 다시 충전', ['refreshed every five hours until the weekly limit is reached']), []);
+  assert.deepEqual(missingNumbers('2026년 7월부터 이름이 바뀌었어요', ['Jul 16, 2026']), []);
+  assert.deepEqual(missingNumbers('최신 버전은 2.31.2', ['v2.31.2 Latest']), []);
+  assert.deepEqual(missingNumbers('최신 버전은 2.31', ['v2.31.2 Latest']), ['2.31'], '버전은 통째로 같아야 한다');
+  assert.deepEqual(missingNumbers('숫자가 없는 문장', []), []);
+});

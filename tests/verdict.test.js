@@ -188,3 +188,39 @@ test('가져온 페이지 목록이 비어 있거나 이상해도 예외를 내�
     assert.equal(r.verdict, 'unverified');
   }
 });
+
+// ---------- "그대로"의 숫자 확인 ----------
+
+test('same 이어도 슬라이드의 숫자가 근거 문장에 없으면 unverified 로 돌리고 빠진 숫자를 알려 준다', () => {
+  const r = finalize(
+    { verdict: 'same', evidence: [ev(T1, 'The Pro plan costs $19.99 per month', 'same')], suggestion: null },
+    pages, domains, 'Pro 는 월 19.99달러, 플러그인은 54개',
+  );
+  assert.equal(r.verdict, 'unverified');
+  assert.equal(r.reason, 'no_matching_quote');
+  assert.match(r.humanTask, /54/);
+  assert.ok(!/19\.99/.test(r.humanTask), '확인된 숫자는 할 일에 적지 않는다');
+  assert.deepEqual(r.evidence, []);
+});
+
+test('same 이고 숫자가 근거 문장들에 나뉘어 모두 있으면 same', () => {
+  const r = finalize(
+    { verdict: 'same', evidence: [ev(T1, 'The Pro plan costs $19.99 per month', 'same'), ev(T1, 'The marketplace lists 54 plugins today', 'same')], suggestion: null },
+    pages, domains, 'Pro 는 월 19.99달러, 플러그인은 54개',
+  );
+  assert.equal(r.verdict, 'same');
+  assert.equal(r.evidence.length, 2);
+});
+
+test('슬라이드 문장을 주지 않으면 숫자 확인을 하지 않는다(예전 동작)', () => {
+  const r = finalize({ verdict: 'same', evidence: [ev(T1, 'The Pro plan costs $19.99 per month', 'same')], suggestion: null }, pages, domains);
+  assert.equal(r.verdict, 'same');
+});
+
+test('changed 판정에는 숫자 확인을 적용하지 않는다', () => {
+  const r = finalize(
+    { verdict: 'changed', evidence: [ev(T1, 'The marketplace lists 54 plugins today', 'changed')], suggestion: '54개로 고쳐요.' },
+    pages, domains, '플러그인은 60개',
+  );
+  assert.equal(r.verdict, 'changed');
+});

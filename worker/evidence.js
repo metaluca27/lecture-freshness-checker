@@ -62,3 +62,39 @@ export function quoteInPage(quote, pageText) {
     from = start + 1;
   }
 }
+
+// ---------- 숫자 대조 ----------
+// "그대로" 판정은 슬라이드 문장의 숫자가 근거 문장에 모두 있을 때만 인정한다.
+// 근거가 내용의 일부만 뒷받침하는데 통째로 맞다고 하는 것을 막는다.
+
+const NUMBER_WORDS = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, hundred: 100, thousand: 1000,
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
+};
+
+/** 글에 나온 숫자를 모은다. "7,500" 은 7500, "2.31.2" 는 그대로 버전 문자열로 둔다. */
+export function numbersIn(text, { words = false } = {}) {
+  if (typeof text !== 'string') return [];
+  let s = text.normalize('NFKC').toLowerCase();
+  if (words) s = s.replace(/[a-z]+/g, (w) => (Object.hasOwn(NUMBER_WORDS, w) ? String(NUMBER_WORDS[w]) : w));
+  const out = [];
+  for (const m of s.matchAll(/\d[\d,]*(?:\.\d+)*/g)) {
+    const raw = m[0].replace(/,(?=\d)/g, '').replace(/[,.]+$/, '');
+    if (!raw) continue;
+    // 점이 둘 이상이면 버전 번호다. 숫자로 바꾸지 않고 글자 그대로 비교한다.
+    out.push((raw.match(/\./g) ?? []).length >= 2 ? raw : String(Number(raw)));
+  }
+  return out;
+}
+
+/**
+ * 슬라이드 문장의 숫자 가운데 근거 문장들에 없는 것을 돌려준다. 빈 목록이면 모두 있다는 뜻이다.
+ * @param {string} claimText
+ * @param {string[]} quotes
+ */
+export function missingNumbers(claimText, quotes) {
+  const have = new Set((quotes ?? []).flatMap((q) => numbersIn(q, { words: true })));
+  return [...new Set(numbersIn(claimText))].filter((n) => !have.has(n));
+}
