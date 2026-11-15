@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeWorker } from '../worker/index.js';
+import { makeWorker, dedupeFamilies } from '../worker/index.js';
 
 const ORIGIN = 'https://vaulted-bus-346411.web.app';
 const KEY = 'route-test-key-DO-NOT-LEAK';
@@ -174,6 +174,23 @@ test('/api/suggest-sites: 모델이 알아낸 제품 이름으로 검색한다',
   const res = await makeWorker(f).fetch(post('/api/suggest-sites', { sample: '강사 아무개\n출퇴근길이 1:1 과외가 되는\n제미나이 노트북' }), env);
   assert.deepEqual(f.log.search, ['Gemini Notebook official site']);
   assert.deepEqual((await res.json()).tier1, ['notebook.google.com']);
+});
+
+test('dedupeFamilies: 끝의 .com 만 다른 주소는 검색에 더 많이 나온 쪽 하나만 남긴다', () => {
+  const hosts = ['antigravity.google', 'antigravity.google', 'antigravity.google.com', 'notebook.google.com', 'support.google.com'];
+  assert.deepEqual(dedupeFamilies(['antigravity.google', 'antigravity.google.com'], hosts), ['antigravity.google']);
+  assert.deepEqual(dedupeFamilies(['notebook.google', 'notebook.google.com', 'obsidian.md'], hosts), ['notebook.google.com', 'obsidian.md']);
+  assert.deepEqual(dedupeFamilies(['notebook.google', 'notebook.google.com'], []), ['notebook.google'], '검색 결과가 없으면 먼저 나온 쪽');
+  assert.deepEqual(dedupeFamilies(['cloud.google.com', 'support.google.com', 'example.com'], hosts), ['cloud.google.com', 'support.google.com', 'example.com'], '서로 다른 주소는 그대로');
+});
+
+test('/api/suggest-sites: 이름이 거의 같은 주소는 한쪽만 제안하고, 2등급에도 되풀이하지 않는다', async () => {
+  const f = fakes({
+    chat: (name) => (name === 'topic' ? { product: 'Antigravity', query: 'Antigravity official site' } : { tier1: ['antigravity.google', 'antigravity.google.com'], tier2: ['antigravity.google.com', 'cloud.google.com'] }),
+    results: [{ url: 'https://antigravity.google/docs', title: 'Docs', hostname: 'antigravity.google' }, { url: 'https://antigravity.google/pricing', title: 'Pricing', hostname: 'antigravity.google' }, { url: 'https://antigravity.google.com/', title: 'x', hostname: 'antigravity.google.com' }],
+  });
+  const out = await (await makeWorker(f).fetch(post('/api/suggest-sites', { sample: '안티그라비티 강의' }), env)).json();
+  assert.deepEqual(out, { tier1: ['antigravity.google'], tier2: ['cloud.google.com'] });
 });
 
 test('/api/suggest-sites: 검색이 실패해도 제안은 계속한다', async () => {

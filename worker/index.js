@@ -49,6 +49,24 @@ function cleanDomain(value) {
   return DOMAIN_RE.test(d) ? d : null;
 }
 
+// 끝의 .com 만 다른 주소(example.google 과 example.google.com)를 같은 묶음으로 본다.
+function familyKey(domain) {
+  const parts = domain.split('.');
+  return parts.length >= 3 && parts[parts.length - 1] === 'com' ? parts.slice(0, -1).join('.') : domain;
+}
+
+// 같은 묶음에서는 검색 결과에 가장 많이 나온 주소 하나만 남긴다. 순서는 처음 나온 순서를 지킨다.
+export function dedupeFamilies(domains, hitHosts = []) {
+  const score = (d) => hitHosts.filter((h) => h === d || h.endsWith('.' + d)).length;
+  const best = new Map();
+  for (const d of domains) {
+    const key = familyKey(d);
+    const current = best.get(key);
+    if (!current || score(d) > score(current)) best.set(key, d);
+  }
+  return [...best.values()];
+}
+
 // 사용자가 확인한 도메인 설정. 하나라도 이상하면 받지 않는다.
 function parseDomains(input) {
   if (!input || typeof input !== 'object') throw bad('invalid_domains');
@@ -187,9 +205,13 @@ export function makeWorker(deps = {}) {
         hits = [];
       }
       const out = await chatJson(suggestSitesMessages(product ? `${body.sample}\n(이 자료가 다루는 것: ${product})` : body.sample, hits), env, { schema: SITES_SCHEMA, schemaName: 'sites', maxTokens: 400 });
-      const clean = (list, max) => [...new Set((Array.isArray(list) ? list : []).map(cleanDomain).filter(Boolean))].slice(0, max);
-      const tier1 = clean(out?.tier1, MAX_TIER1);
-      const tier2 = clean(out?.tier2, MAX_TIER2 + MAX_TIER1).filter((d) => !tier1.includes(d)).slice(0, MAX_TIER2);
+      const clean = (list) => [...new Set((Array.isArray(list) ? list : []).map(cleanDomain).filter(Boolean))];
+      // example.google 과 example.google.com 처럼 이름이 거의 같은 주소가 함께 나오면 사용자가 헷갈린다.
+      // 검색 결과에 더 많이 나온 쪽 하나만 남긴다.
+      const hosts = hits.map((h) => String(h.hostname ?? '').toLowerCase());
+      const tier1 = dedupeFamilies(clean(out?.tier1), hosts).slice(0, MAX_TIER1);
+      const taken = new Set(tier1.map(familyKey));
+      const tier2 = dedupeFamilies(clean(out?.tier2), hosts).filter((d) => !taken.has(familyKey(d))).slice(0, MAX_TIER2);
       return { tier1, tier2 };
     },
 
