@@ -2,7 +2,7 @@
 // 여기에 키는 없다. 키는 워커 안에만 있다.
 
 const LOCAL_WORKER = 'http://localhost:8798';
-const DEPLOYED_WORKER = ''; // 배포할 때 워커의 실제 주소를 넣는다(작업 17)
+const DEPLOYED_WORKER = 'https://lecture-freshness-checker.atlia0318.workers.dev';
 
 const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
 
