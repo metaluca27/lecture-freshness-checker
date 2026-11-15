@@ -6,7 +6,7 @@
 //   node eval/run-deck-eval.js             한 번
 //   node eval/run-deck-eval.js --runs 3    세 번 돌려 흔들림도 본다
 //   node eval/run-deck-eval.js --file tests/fixtures/company-training-sample.pptx
-//                                          같은 내용으로 만든 실제 PPT 파일로 잰다(eval/build-company-deck.cjs 가 만든다)
+//                                          같은 내용으로 만든 실제 PPT 파일로 잰다(eval/build_company_deck.py 가 만든다)
 
 import fs from 'node:fs';
 import path from 'node:path';

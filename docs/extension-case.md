@@ -7,7 +7,7 @@
 - 이름: 「한빛물산 2026 하반기 신입사원 교육 · 업무용 AI 도구 사용 안내」 6장
 - 회사와 부서는 지어낸 것이다. 실제 회사의 내부 자료나 개인정보는 쓰지 않았다.
 - 내용은 공개된 공식 문서로 확인할 수 있는 도구 안내다(Google Antigravity, Gemini Notebook).
-- 원본: `eval/company-deck.json`. PowerPoint 에서 열 수 있는 PPT 는 `node eval/build-company-deck.cjs` 로 만들어 `tests/fixtures/company-training-sample.pptx` 에 둔다. 문장은 원본과 한 글자도 다르지 않다.
+- 원본: `eval/company-deck.json`. PowerPoint 에서 열 수 있는 PPT 는 `python eval/build_company_deck.py`(python-pptx 필요) 로 만들어 `tests/fixtures/company-training-sample.pptx` 에 둔다. 문장은 원본과 한 글자도 다르지 않다.
 
 ## 일부러 심어 둔 것
 
