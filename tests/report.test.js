@@ -83,3 +83,10 @@ test('원래 문장에 Markdown 기호가 있어도 문서 구조를 깨지 않�
   assert.ok(!/^# 제목처럼/m.test(md));
   assert.ok(!/\n\| 표/.test(md));
 });
+
+test('PDF 결과는 슬라이드 대신 쪽으로 쓴다', () => {
+  const md = toMarkdown(claims, results, { unit: '쪽' });
+  assert.match(md, /^## 2쪽$/m);
+  assert.match(md, /^## 12쪽$/m);
+  assert.ok(!md.includes('## 슬라이드'));
+});

@@ -4,26 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>강의자료 유통기한 검사기</title>
-  <meta name="description" content="강의 PPT의 낡은 버전·요금·메뉴를 공식 문서와 대조해 출처와 함께 짚어 줘요.">
+  <meta name="description" content="강의 자료(PPT, PDF)의 낡은 버전·요금·메뉴를 공식 문서와 대조해 출처와 함께 짚어 줘요.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="top">
     <p class="eyebrow">강의 전날의 2시간을 줄여요</p>
     <h1>강의자료 유통기한 검사기</h1>
-    <p class="lead">강의 PPT를 올리면 낡았을 수 있는 버전·요금·메뉴 이름을 골라 <strong>공식 문서 본문</strong>과 대조해요. 근거 문장이 공식 문서에 실제로 있을 때만 판정하고, 없으면 "확인 못 함"이라고 말해요.</p>
+    <p class="lead">강의 자료(PPT, PDF)를 올리면 낡았을 수 있는 버전·요금·메뉴 이름을 골라 <strong>공식 문서 본문</strong>과 대조해요. 근거 문장이 공식 문서에 실제로 있을 때만 판정하고, 없으면 "확인 못 함"이라고 말해요.</p>
   </header>
 
   <main>
     <!-- 1. 올리기 -->
     <section id="step-upload" class="panel" aria-labelledby="h-upload">
-      <h2 id="h-upload"><span class="num">1</span> PPT 올리기</h2>
+      <h2 id="h-upload"><span class="num">1</span> 자료 올리기</h2>
       <label id="drop" class="drop" for="file">
-        <span class="drop-main">여기에 .pptx 파일을 끌어다 놓거나 눌러서 고르세요</span>
-        <span class="drop-sub">슬라이드 60장, 80MB까지</span>
-        <input id="file" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+        <span class="drop-main">여기에 PPT(.pptx)나 PDF 파일을 끌어다 놓거나 눌러서 고르세요</span>
+        <span class="drop-sub">60장(60쪽), 80MB까지 · 한글·워드 문서는 PDF로 저장해서 올려 주세요</span>
+        <input id="file" type="file" accept=".pptx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
       </label>
-      <p class="notice">기밀 자료나 개인정보가 든 자료는 넣지 마세요. 원본 파일은 저장하지 않지만, 슬라이드 내용은 검사를 위해 외부 AI 서비스(Liner)로 전달돼요.</p>
+      <p class="notice">기밀 자료나 개인정보가 든 자료는 넣지 마세요. 원본 파일은 저장하지 않지만, 자료 내용은 검사를 위해 외부 AI 서비스(Liner)로 전달돼요.</p>
       <p id="upload-status" class="status" role="status"></p>
     </section>
 

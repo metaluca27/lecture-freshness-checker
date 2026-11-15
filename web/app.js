@@ -3,17 +3,52 @@
 
 import { API_BASE, MAX_FILE_BYTES } from './config.js';
 import { parsePptx } from './pptx.js';
+import { parsePdf } from './pdf.js';
 import { runCheck, pickImage } from './run.js';
 import { summarize, toMarkdown, VERDICT_LABEL, formatElapsed } from './report.js';
 
 const $ = (id) => document.getElementById(id);
 const DOMAIN_RE = /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const ORIGIN_LABEL = { text: '슬라이드 글자', notes: '발표 노트', image: '슬라이드 그림' };
+const ORIGIN_LABEL_PDF = { text: '본문 글자', notes: '메모', image: '쪽 그림' };
 const VERDICT_ORDER = ['changed', 'unverified', 'same'];
 
-const state = { fileName: '', slides: [], domains: null, run: null, controller: null, filter: 'all' };
+const state = { fileName: '', kind: 'pptx', slides: [], domains: null, run: null, controller: null, filter: 'all' };
 
 // ---------- 작은 도구 ----------
+
+// PPT 는 "슬라이드 3장", PDF 는 "3쪽" 이라고 부른다.
+const isPdf = () => state.kind === 'pdf';
+const unitWord = () => (isPdf() ? '쪽' : '슬라이드');
+const countLabel = (n) => (isPdf() ? `${n}쪽` : `슬라이드 ${n}장`);
+const itemLabel = (n) => (isPdf() ? `${n}쪽` : `슬라이드 ${n}`);
+const originLabel = (origin) => (isPdf() ? ORIGIN_LABEL_PDF : ORIGIN_LABEL)[origin] ?? '';
+
+// pdf.js 는 PDF 를 올렸을 때만 불러온다.
+let pdfjsPromise;
+function loadPdfjs() {
+  pdfjsPromise ??= import('./vendor/pdfjs/pdf.min.mjs').then((lib) => {
+    lib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
+    return lib;
+  });
+  return pdfjsPromise;
+}
+
+// PDF 한 쪽을 그림으로 만든다. 글자가 없는 쪽(스캔한 쪽)을 모델이 읽을 수 있게 한다.
+async function renderPdfPage(page) {
+  const base = page.getViewport({ scale: 1 });
+  const scale = Math.min(2.5, MAX_IMAGE_SIDE / Math.max(base.width, base.height));
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: 'image/jpeg' };
+}
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -60,20 +95,33 @@ function parseDomainInput(value) {
 
 async function handleFile(file) {
   if (!file) return;
-  if (!/\.pptx$/i.test(file.name)) return setStatus('upload-status', '.pptx 파일만 검사할 수 있어요. PowerPoint에서 "다른 이름으로 저장"으로 .pptx로 바꿔 주세요.', true);
+  const kind = /\.pdf$/i.test(file.name) ? 'pdf' : /\.pptx$/i.test(file.name) ? 'pptx' : null;
+  if (!kind) return setStatus('upload-status', '.pptx 와 .pdf 파일만 검사할 수 있어요. 한글이나 워드 문서는 PDF로 저장해서 올려 주세요.', true);
   if (file.size > MAX_FILE_BYTES) return setStatus('upload-status', '파일이 너무 커요. 80MB까지 검사할 수 있어요.', true);
 
   setStatus('upload-status', '파일을 읽고 있어요…');
   let slides;
   try {
-    slides = await parsePptx(await file.arrayBuffer(), window.JSZip);
+    if (kind === 'pdf') {
+      const pdfjsLib = await loadPdfjs();
+      const base = new URL('./vendor/pdfjs/', import.meta.url).href;
+      slides = await parsePdf(await file.arrayBuffer(), pdfjsLib, {
+        renderPage: renderPdfPage,
+        documentOptions: { cMapUrl: base + 'cmaps/', cMapPacked: true, standardFontDataUrl: base + 'standard_fonts/' },
+      });
+    } else {
+      slides = await parsePptx(await file.arrayBuffer(), window.JSZip);
+    }
   } catch (e) {
-    return setStatus('upload-status', e?.message || 'pptx 파일을 읽을 수 없어요', true);
+    return setStatus('upload-status', e?.message || '파일을 읽을 수 없어요', true);
   }
-  const withText = slides.filter((s) => s.text.trim() || s.notes.trim()).length;
-  if (withText === 0) return setStatus('upload-status', '슬라이드에서 글자를 찾지 못했어요. 글자가 그림으로만 들어 있는 자료일 수 있어요.', true);
+  // 글자가 그림 안에만 있는 자료도 그림을 읽어 검사할 수 있으니, 글자도 그림도 없을 때만 막는다.
+  const withContent = slides.filter((s) => s.text.trim() || s.notes.trim() || s.images.length).length;
+  if (withContent === 0) return setStatus('upload-status', '자료에서 글자나 그림을 찾지 못했어요.', true);
 
   state.fileName = file.name;
+  state.kind = kind;
+  clearThumbs();
   state.slides = slides;
   setStatus('upload-status', '');
   $('tier1').value = '';
@@ -81,7 +129,7 @@ async function handleFile(file) {
   $('confirm').checked = false;
   updateStart();
   show('step-sites');
-  setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장을 읽었어요. 공식 사이트를 제안받는 중이에요…`);
+  setStatus('sites-status', `${file.name} · ${countLabel(slides.length)}을 읽었어요. 공식 사이트를 제안받는 중이에요…`);
 
   // 주제를 보고 공식 사이트를 제안받는다. 실패해도 직접 적으면 된다.
   try {
@@ -89,18 +137,28 @@ async function handleFile(file) {
     const texts = slides.map((s) => s.text).filter((t) => t.trim()).join('\n');
     const notes = slides.map((s) => s.notes).filter((t) => t.trim()).join('\n');
     const sample = (texts.length >= 200 ? texts : `${texts}\n${notes}`).trim().slice(0, 3000);
-    let out = await callApi('/api/suggest-sites', { sample });
-    if (!out.tier1?.length) out = await callApi('/api/suggest-sites', { sample }); // 빈 제안이면 한 번 더 묻는다
+    // 글자가 거의 없으면(그림으로만 된 자료) 표지 그림을 함께 보내 무엇을 다루는 자료인지 알아내게 한다.
+    // 표지에는 제품 이름이 없을 수 있어서 앞쪽 그림을 3장까지 보낸다.
+    const imageDataUrls = [];
+    if (sample.length < 40) {
+      for (const s of slides.filter((x) => pickImage(x)).slice(0, 3)) {
+        const url = await slideImageDataUrl(s).catch(() => null);
+        if (url) imageDataUrls.push(url);
+      }
+    }
+    const ask = { sample, imageDataUrls };
+    let out = await callApi('/api/suggest-sites', ask);
+    if (!out.tier1?.length) out = await callApi('/api/suggest-sites', ask); // 빈 제안이면 한 번 더 묻는다
     if (!$('tier1').value) $('tier1').value = (out.tier1 ?? []).join(', ');
     if (!$('tier2').value) $('tier2').value = (out.tier2 ?? []).join(', ');
     if ($('tier1').value.trim()) {
-      setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장. AI가 제안한 사이트예요. 맞는지 확인하고 필요하면 고쳐 주세요.`);
+      setStatus('sites-status', `${file.name} · ${countLabel(slides.length)}. AI가 제안한 사이트예요. 맞는지 확인하고 필요하면 고쳐 주세요.`);
     } else {
-      setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장. AI가 공식 사이트를 제안하지 못했어요. 위 칸에 공식 사이트 도메인을 직접 적어 주세요.`);
+      setStatus('sites-status', `${file.name} · ${countLabel(slides.length)}. AI가 공식 사이트를 제안하지 못했어요. 위 칸에 공식 사이트 도메인을 직접 적어 주세요.`);
       $('tier1').focus();
     }
   } catch {
-    setStatus('sites-status', `${file.name} · 슬라이드 ${slides.length}장. 사이트 제안을 받지 못했어요. 공식 사이트 도메인을 직접 적어 주세요.`);
+    setStatus('sites-status', `${file.name} · ${countLabel(slides.length)}. 사이트 제안을 받지 못했어요. 공식 사이트 도메인을 직접 적어 주세요.`);
   }
   updateStart();
 }
@@ -176,7 +234,7 @@ async function startRun() {
 
   $('live').replaceChildren();
   $('bar-fill').style.width = '0%';
-  $('run-phase').textContent = '슬라이드에서 낡을 수 있는 내용을 고르는 중이에요';
+  $('run-phase').textContent = '자료에서 낡을 수 있는 내용을 고르는 중이에요';
   $('run-count').textContent = '';
   $('stop').disabled = false;
   show('step-run');
@@ -193,8 +251,8 @@ async function startRun() {
 
 function onProgress(e) {
   if (e.phase === 'extract') {
-    $('run-phase').textContent = '슬라이드에서 낡을 수 있는 내용을 고르는 중이에요';
-    $('run-count').textContent = `슬라이드 ${e.done} / ${e.total}`;
+    $('run-phase').textContent = '자료에서 낡을 수 있는 내용을 고르는 중이에요';
+    $('run-count').textContent = `${unitWord()} ${e.done} / ${e.total}`;
     $('bar-fill').style.width = `${Math.round((e.done / Math.max(1, e.total)) * 30)}%`;
   } else if (e.phase === 'check') {
     $('run-phase').textContent = '공식 문서와 대조하는 중이에요';
@@ -202,7 +260,7 @@ function onProgress(e) {
     $('bar-fill').style.width = `${30 + Math.round((e.done / Math.max(1, e.total)) * 70)}%`;
     const item = el('li', {}, [
       el('span', { class: `badge ${e.result.verdict}`, text: VERDICT_LABEL[e.result.verdict] ?? '확인 못 함' }),
-      el('span', { class: 'text', text: `슬라이드 ${e.claim.slide} · ${e.claim.text}` }),
+      el('span', { class: 'text', text: `${itemLabel(e.claim.slide)} · ${e.claim.text}` }),
     ]);
     $('live').prepend(item);
     while ($('live').children.length > 5) $('live').lastElementChild.remove();
@@ -219,13 +277,13 @@ function renderResult() {
     stat('changed', sum.changed, '바뀜'),
     stat('unverified', sum.unverified, '확인 못 함'),
     stat('same', sum.same, '그대로'),
-    stat('', formatElapsed(elapsedMs), `걸린 시간 · 슬라이드 ${state.slides.length}장`),
+    stat('', formatElapsed(elapsedMs), `걸린 시간 · ${countLabel(state.slides.length)}`),
   );
 
   const notes = [];
   if (stopped) notes.push('중간에 중단해서 그때까지의 결과만 보여요.');
   if (skipped) notes.push(`내용이 많아 ${skipped}개는 검사하지 않았어요.`);
-  if (failedSlides.length) notes.push(`슬라이드 ${failedSlides.join(', ')}장은 내용을 고르지 못했어요.`);
+  if (failedSlides.length) notes.push(`${unitWord()} ${failedSlides.join(', ')}번은 내용을 고르지 못했어요.`);
   if (claims.length === 0 && !stopped) notes.push('낡을 수 있는 내용(버전, 요금, 숫자, 날짜, 메뉴, 기능)을 찾지 못했어요.');
   setStatus('result-notes', notes.join(' '));
   renderSiteTip(results);
@@ -254,7 +312,7 @@ function renderSiteTip(results) {
   back.addEventListener('click', () => {
     $('confirm').checked = false;
     updateStart();
-    setStatus('sites-status', `${state.fileName} · 슬라이드 ${state.slides.length}장. 공식 사이트를 고친 뒤 다시 확인해 주세요.`);
+    setStatus('sites-status', `${state.fileName} · ${countLabel(state.slides.length)}. 공식 사이트를 고친 뒤 다시 확인해 주세요.`);
     show('step-sites');
     $('tier1').focus();
   });
@@ -296,8 +354,8 @@ function renderCards() {
 
     rows.push(el('section', { class: 'slide-row' }, [
       el('div', { class: 'slide-side' }, [
-        el('p', { class: 'slide-no', text: `슬라이드 ${slide.slide}` }),
-        slideThumbUrl(slide) ? el('img', { class: 'slide-thumb', src: slideThumbUrl(slide), alt: `슬라이드 ${slide.slide} 그림`, loading: 'lazy' }) : null,
+        el('p', { class: 'slide-no', text: itemLabel(slide.slide) }),
+        slideThumbUrl(slide) ? el('img', { class: 'slide-thumb', src: slideThumbUrl(slide), alt: `${itemLabel(slide.slide)} 그림`, loading: 'lazy' }) : null,
         slide.text.trim() ? el('p', { class: 'slide-text', text: slide.text }) : (slideThumbUrl(slide) ? null : el('p', { class: 'slide-text', text: '(글자 없음)' })),
       ]),
       el('div', { class: 'slide-cards' }, items.map(card)),
@@ -320,7 +378,7 @@ function card({ claim, result }) {
   const node = el('article', { class: `card ${v}` }, [
     el('div', { class: 'card-head' }, [
       el('span', { class: `badge ${v}`, text: VERDICT_LABEL[v] ?? '확인 못 함' }),
-      el('p', { class: 'claim' }, [claim.text + ' ', el('span', { class: 'origin', text: `· ${ORIGIN_LABEL[claim.origin] ?? ''}` })]),
+      el('p', { class: 'claim' }, [claim.text + ' ', el('span', { class: 'origin', text: `· ${originLabel(claim.origin)}` })]),
     ]),
   ]);
 
@@ -352,7 +410,7 @@ function markdown() {
   const { claims, results, elapsedMs, skipped, stopped } = state.run;
   const d = new Date();
   const checkedAt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  return toMarkdown(claims, results, { fileName: state.fileName, domains: state.domains, elapsedMs, checkedAt, skipped, stopped });
+  return toMarkdown(claims, results, { fileName: state.fileName, domains: state.domains, elapsedMs, checkedAt, skipped, stopped, unit: unitWord() });
 }
 
 // ---------- 이벤트 ----------
@@ -360,7 +418,7 @@ function markdown() {
 function reset() {
   state.controller?.abort();
   clearThumbs();
-  Object.assign(state, { fileName: '', slides: [], domains: null, run: null, controller: null, filter: 'all' });
+  Object.assign(state, { fileName: '', kind: 'pptx', slides: [], domains: null, run: null, controller: null, filter: 'all' });
   $('file').value = '';
   setStatus('upload-status', '');
   show('step-upload');
@@ -406,7 +464,7 @@ $('copy').addEventListener('click', async () => {
 $('download').addEventListener('click', () => {
   const blob = new Blob([markdown()], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const a = el('a', { href: url, download: `${state.fileName.replace(/\.pptx$/i, '')}_검사결과.md` });
+  const a = el('a', { href: url, download: `${state.fileName.replace(/\.(pptx|pdf)$/i, '')}_검사결과.md` });
   document.body.append(a);
   a.click();
   a.remove();

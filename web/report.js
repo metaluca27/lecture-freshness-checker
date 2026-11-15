@@ -33,7 +33,7 @@ function oneLine(text) {
 /**
  * @param {object[]} claims 검사 대상 내용
  * @param {object[]} results 판정 결과
- * @param {{ fileName?: string, domains?: object, elapsedMs?: number, checkedAt?: string, skipped?: number, stopped?: boolean }} meta
+ * @param {{ unit?: string, fileName?: string, domains?: object, elapsedMs?: number, checkedAt?: string, skipped?: number, stopped?: boolean }} meta
  */
 export function toMarkdown(claims, results, meta = {}) {
   const byId = new Map((results ?? []).filter(Boolean).map((r) => [r.claimId, r]));
@@ -56,7 +56,7 @@ export function toMarkdown(claims, results, meta = {}) {
   for (const c of sorted) {
     if (c.slide !== currentSlide) {
       currentSlide = c.slide;
-      lines.push(`## 슬라이드 ${c.slide}`, '');
+      lines.push(meta.unit === '쪽' ? `## ${c.slide}쪽` : `## 슬라이드 ${c.slide}`, '');
     }
     const r = byId.get(c.id);
     const label = r ? VERDICT_LABEL[r.verdict] ?? '확인 못 함' : '검사하지 않음';

@@ -276,3 +276,22 @@ test('키가 설정되지 않았으면 500 이고 모델을 부르지 않는다'
   assert.equal(res.status, 500);
   assert.equal(f.log.chat.length, 0);
 });
+
+test('/api/suggest-sites: 글자가 없어도 표지 그림이 있으면 받는다', async () => {
+  const f = fakes({ chat: (name) => (name === 'topic' ? { product: 'NotebookLM, Gamma', query: 'NotebookLM official site' } : { tier1: ['notebook.google.com'], tier2: [] }) });
+  const res = await makeWorker(f).fetch(post('/api/suggest-sites', { sample: '', imageDataUrls: ['data:image/jpeg;base64,AAAA', 'data:image/jpeg;base64,BBBB'] }), env);
+  assert.equal(res.status, 200);
+  const topicCall = f.log.chat.find((c) => c.options.schemaName === 'topic');
+  const parts = topicCall.messages[topicCall.messages.length - 1].content;
+  assert.equal(parts.filter((p) => p.type === 'image_url').length, 2);
+  const sitesCall = f.log.chat.find((c) => c.options.schemaName === 'sites');
+  assert.match(sitesCall.messages.map((m) => m.content).join('\n'), /NotebookLM, Gamma/);
+});
+
+test('/api/suggest-sites: 글자도 그림도 없으면 400, 그림 형식이 틀려도 400', async () => {
+  const w = makeWorker(fakes());
+  assert.equal((await w.fetch(post('/api/suggest-sites', { sample: '' }), env)).status, 400);
+  assert.equal((await w.fetch(post('/api/suggest-sites', { sample: '', imageDataUrl: 'https://example.com/a.png' }), env)).status, 400);
+  assert.equal((await w.fetch(post('/api/suggest-sites', { sample: '', imageDataUrls: [] }), env)).status, 400);
+  assert.equal((await w.fetch(post('/api/suggest-sites', { sample: '글', imageDataUrls: Array(4).fill('data:image/jpeg;base64,AAAA') }), env)).status, 400);
+});

@@ -79,6 +79,16 @@ function parseClaim(input) {
   };
 }
 
+// 그림은 크기와 형식이 맞는 data 주소만 받는다. 없으면(null) 통과.
+function checkImage(imageDataUrl) {
+  if (imageDataUrl === null || imageDataUrl === undefined) return;
+  if (typeof imageDataUrl !== 'string') throw bad('invalid_image');
+  const comma = imageDataUrl.indexOf(',');
+  const bytes = comma === -1 ? 0 : Math.floor(((imageDataUrl.length - comma - 1) * 3) / 4);
+  if (bytes > MAX_IMAGE_BYTES) throw bad('image_too_large');
+  if (!IMAGE_RE.test(imageDataUrl)) throw bad('invalid_image');
+}
+
 function parseExtract(input) {
   if (!input || typeof input !== 'object') throw bad('invalid_slide');
   const { slide, text = '', notes = '', imageDataUrl = null, context = '' } = input;
@@ -86,13 +96,7 @@ function parseExtract(input) {
   if (!Number.isInteger(slide) || slide < 1 || slide > MAX_SLIDES) throw bad('invalid_slide');
   if (typeof text !== 'string' || typeof notes !== 'string') throw bad('invalid_slide');
   if (text.length > MAX_SLIDE_CHARS || notes.length > MAX_SLIDE_CHARS) throw bad('slide_too_long');
-  if (imageDataUrl !== null) {
-    if (typeof imageDataUrl !== 'string') throw bad('invalid_image');
-    const comma = imageDataUrl.indexOf(',');
-    const bytes = comma === -1 ? 0 : Math.floor(((imageDataUrl.length - comma - 1) * 3) / 4);
-    if (bytes > MAX_IMAGE_BYTES) throw bad('image_too_large');
-    if (!IMAGE_RE.test(imageDataUrl)) throw bad('invalid_image');
-  }
+  checkImage(imageDataUrl);
   return { slide, text, notes, imageDataUrl, context: context.slice(0, 500) };
 }
 
@@ -153,15 +157,26 @@ export function makeWorker(deps = {}) {
 
   const routes = {
     '/api/suggest-sites': async (body, env) => {
-      if (typeof body.sample !== 'string' || !body.sample.trim()) throw bad('invalid_sample');
+      // 글자가 그림 안에만 있는 자료는 글 대신 표지 그림을 받는다. 둘 중 하나는 있어야 한다.
+      // 표지만으로는 무엇을 다루는지 알 수 없는 자료가 있어서 앞쪽 그림을 3장까지 받는다.
+      const images = body.imageDataUrls ?? (body.imageDataUrl ? [body.imageDataUrl] : []);
+      if (!Array.isArray(images) || images.length > 3) throw bad('invalid_image');
+      for (const img of images) {
+        if (img === null || img === undefined) throw bad('invalid_image');
+        checkImage(img);
+      }
+      if (typeof body.sample !== 'string') throw bad('invalid_sample');
+      if (!body.sample.trim() && images.length === 0) throw bad('invalid_sample');
       // 모델의 기억만 믿지 않고, 자료 제목으로 먼저 검색해서 지금 실제로 나오는 사이트를 함께 보여 준다.
       // (제품 이름이나 주소가 바뀐 경우를 잡기 위해서다.) 검색이 실패해도 제안은 계속한다.
       // 검색어는 모델이 자료에서 알아낸 제품 이름으로 만든다. 못 알아내면 자료 첫 줄들을 쓴다.
       const title = body.sample.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 4).join(' ').slice(0, 120);
       let query = `${title} 공식 사이트`;
+      let product = '';
       try {
-        const topic = await chatJson(topicMessages(body.sample), env, { schema: TOPIC_SCHEMA, schemaName: 'topic', maxTokens: 200 });
+        const topic = await chatJson(topicMessages(body.sample, images), env, { schema: TOPIC_SCHEMA, schemaName: 'topic', maxTokens: 200 });
         if (typeof topic?.query === 'string' && topic.query.trim()) query = topic.query.trim().slice(0, 150);
+        if (typeof topic?.product === 'string' && topic.product.trim()) product = topic.product.trim().slice(0, 150);
       } catch {
         // 제품 이름을 못 알아내도 제안은 계속한다.
       }
@@ -171,7 +186,7 @@ export function makeWorker(deps = {}) {
       } catch {
         hits = [];
       }
-      const out = await chatJson(suggestSitesMessages(body.sample, hits), env, { schema: SITES_SCHEMA, schemaName: 'sites', maxTokens: 400 });
+      const out = await chatJson(suggestSitesMessages(product ? `${body.sample}\n(이 자료가 다루는 것: ${product})` : body.sample, hits), env, { schema: SITES_SCHEMA, schemaName: 'sites', maxTokens: 400 });
       const clean = (list, max) => [...new Set((Array.isArray(list) ? list : []).map(cleanDomain).filter(Boolean))].slice(0, max);
       const tier1 = clean(out?.tier1, MAX_TIER1);
       const tier2 = clean(out?.tier2, MAX_TIER2 + MAX_TIER1).filter((d) => !tier1.includes(d)).slice(0, MAX_TIER2);
