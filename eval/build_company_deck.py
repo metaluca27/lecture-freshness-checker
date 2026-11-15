@@ -113,8 +113,9 @@ S = DECK["slides"]
 # 1. 표지
 slide = prs.slides.add_slide(BLANK)
 bg = shape(slide, MSO_SHAPE.RECTANGLE, 0, 0, 10, 5.625, DARK)
-shape(slide, MSO_SHAPE.OVAL, 7.4, -1.0, 4.0, 4.0, RGBColor(0x1C, 0x5A, 0x57))
-shape(slide, MSO_SHAPE.OVAL, 8.4, 3.1, 2.4, 2.4, RGBColor(0x17, 0x4E, 0x4D))
+# 장식 동그라미는 슬라이드 안쪽에 둔다. 밖으로 걸치면 편집 화면에서 삐져나와 보인다.
+shape(slide, MSO_SHAPE.OVAL, 7.5, 0.35, 2.1, 2.1, RGBColor(0x1C, 0x5A, 0x57))
+shape(slide, MSO_SHAPE.OVAL, 8.3, 3.2, 1.3, 1.3, RGBColor(0x17, 0x4E, 0x4D))
 text_box(slide, S[0]["text"][0], 0.7, 1.3, 7, 0.4, 16, PALE)
 text_box(slide, S[0]["text"][1], 0.7, 1.85, 8, 1.0, 38, WHITE, True, MSO_ANCHOR.MIDDLE)
 text_box(slide, S[0]["text"][2], 0.7, 3.0, 8, 0.5, 20, WHITE)
