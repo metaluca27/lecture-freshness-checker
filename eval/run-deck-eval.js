@@ -5,7 +5,8 @@
 // 쓰는 법(워커가 켜져 있어야 한다):
 //   node eval/run-deck-eval.js             한 번
 //   node eval/run-deck-eval.js --runs 3    세 번 돌려 흔들림도 본다
-//   node eval/run-deck-eval.js --write     시험용 PPT 를 tests/fixtures 에 저장만 한다
+//   node eval/run-deck-eval.js --file tests/fixtures/company-training-sample.pptx
+//                                          같은 내용으로 만든 실제 PPT 파일로 잰다(eval/build-company-deck.cjs 가 만든다)
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,15 +59,10 @@ async function call(pathname, body) {
 
 async function main() {
   const deck = JSON.parse(fs.readFileSync(path.join(here, 'company-deck.json'), 'utf8'));
-  const pptx = await makePptx(deck.slides.map((s) => ({ paragraphs: s.text.map(xmlEscape), notes: (s.notes ?? []).map(xmlEscape) })));
-
-  if (arg('write', false)) {
-    const out = path.join(here, '..', 'tests', 'fixtures', 'company-training-sample.pptx');
-    fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, Buffer.from(pptx));
-    console.log('저장:', path.relative(process.cwd(), out));
-    return;
-  }
+  const file = arg('file', null);
+  const pptx = typeof file === 'string'
+    ? fs.readFileSync(file)
+    : await makePptx(deck.slides.map((s) => ({ paragraphs: s.text.map(xmlEscape), notes: (s.notes ?? []).map(xmlEscape) })));
 
   const slides = await parsePptx(pptx, JSZip);
   const api = { extract: (i) => call('/api/extract', i), check: (i) => call('/api/check', i) };
