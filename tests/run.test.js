@@ -34,7 +34,8 @@ test('슬라이드 3장: 추출한 뒤 내용을 하나씩 검사하고 진행 �
   const out = await runCheck(slidesOf(3), domains, api, (e) => events.push(e));
 
   assert.equal(api.stats.extractCalls.length, 3);
-  assert.deepEqual(api.stats.extractCalls[0], { slide: 1, text: '1장 글자', notes: '1장 노트', imageDataUrl: null, context: '1장 글자\n2장 글자\n3장 글자\n1장 노트\n2장 노트\n3장 노트' });
+  assert.deepEqual(api.stats.extractCalls[0], { slide: 1, text: '1장 글자', notes: '1장 노트', imageDataUrl: null, context: '' });
+  assert.equal(api.stats.extractCalls.find((c) => c.slide === 2).context, '1장 글자', '주제는 표지 글자만');
   assert.equal(out.claims.length, 6);
   assert.equal(out.results.length, 6);
   assert.deepEqual(out.claims.map((c) => c.id), ['s1-c1', 's1-c2', 's2-c1', 's2-c2', 's3-c1', 's3-c2'], '슬라이드 순서대로');
@@ -183,4 +184,35 @@ test('슬라이드 글자가 거의 없으면 발표 노트를 자료 주제로 
 test('onProgress 가 예외를 내도 검사는 계속한다', async () => {
   const out = await runCheck(slidesOf(2), domains, fakeApi(), () => { throw new Error('화면 오류'); });
   assert.equal(out.results.length, 4);
+});
+
+// ---------- 같은 자료 다시 검사 ----------
+
+test('reuse 를 주면 내용을 다시 뽑지 않고 그 목록을 그대로 검사한다', async () => {
+  const api = fakeApi();
+  const first = await runCheck(slidesOf(3), domains, api, () => {});
+  assert.equal(api.stats.extractCalls.length, 3);
+
+  const events = [];
+  const newDomains = { tier1: ['notebook.google.com'], tier2: [] };
+  const second = await runCheck(slidesOf(3), newDomains, api, (e) => events.push(e), { reuse: { claims: first.claims, skipped: 2, failedSlides: [5] } });
+  assert.equal(api.stats.extractCalls.length, 3, '다시 뽑지 않는다');
+  assert.deepEqual(second.claims.map((c) => c.id), first.claims.map((c) => c.id));
+  assert.equal(second.results.length, 6);
+  assert.deepEqual(api.stats.checkCalls[api.stats.checkCalls.length - 1].domains, newDomains, '새 공식 사이트로 검사한다');
+  assert.equal(second.skipped, 2);
+  assert.deepEqual(second.failedSlides, [5]);
+  assert.equal(events.filter((e) => e.phase === 'extract').length, 0);
+});
+
+test('주제는 표지에서만 가져오고, 다른 장의 문장은 넣지 않는다', async () => {
+  const api = fakeApi();
+  const slides = [
+    { slide: 1, text: 'Google Antigravity 입문', notes: '', images: [] },
+    { slide: 2, text: '최신 버전은 2.28이에요', notes: '', images: [] },
+    { slide: 3, text: '플러그인은 60개예요', notes: '', images: [] },
+  ];
+  await runCheck(slides, domains, api, () => {});
+  const ctx = Object.fromEntries(api.stats.extractCalls.map((c) => [c.slide, c.context]));
+  assert.deepEqual(ctx, { 1: '', 2: 'Google Antigravity 입문', 3: 'Google Antigravity 입문' });
 });

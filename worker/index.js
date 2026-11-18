@@ -49,6 +49,20 @@ function cleanDomain(value) {
   return DOMAIN_RE.test(d) ? d : null;
 }
 
+// 여러 제품의 글이 한데 모여 있거나 누구나 글을 올리는 사이트. 공식 사이트 후보로 제안하지 않는다.
+// (예: codelabs 에는 구글의 모든 제품 실습이 있어서, 다른 제품의 문장이 근거로 잡힌다.)
+// 사용자가 직접 적어 넣는 것은 막지 않는다.
+const TOO_BROAD = new Set([
+  'google.com', 'developers.google.com', 'codelabs.developers.google.com', 'play.google.com', 'sites.google.com',
+  'apple.com', 'apps.apple.com', 'microsoft.com', 'github.com', 'youtube.com', 'medium.com', 'reddit.com',
+  'facebook.com', 'x.com', 'twitter.com', 'linkedin.com', 'wikipedia.org', 'en.wikipedia.org', 'ko.wikipedia.org',
+  'naver.com', 'blog.naver.com', 'tistory.com', 'brunch.co.kr', 'velog.io', 'stackoverflow.com',
+]);
+
+export function isSpecificEnough(domain) {
+  return !TOO_BROAD.has(domain);
+}
+
 // 끝의 .com 만 다른 주소(example.google 과 example.google.com)를 같은 묶음으로 본다.
 function familyKey(domain) {
   const parts = domain.split('.');
@@ -209,9 +223,9 @@ export function makeWorker(deps = {}) {
       // example.google 과 example.google.com 처럼 이름이 거의 같은 주소가 함께 나오면 사용자가 헷갈린다.
       // 검색 결과에 더 많이 나온 쪽 하나만 남긴다.
       const hosts = hits.map((h) => String(h.hostname ?? '').toLowerCase());
-      const tier1 = dedupeFamilies(clean(out?.tier1), hosts).slice(0, MAX_TIER1);
+      const tier1 = dedupeFamilies(clean(out?.tier1).filter(isSpecificEnough), hosts).slice(0, MAX_TIER1);
       const taken = new Set(tier1.map(familyKey));
-      const tier2 = dedupeFamilies(clean(out?.tier2), hosts).filter((d) => !taken.has(familyKey(d))).slice(0, MAX_TIER2);
+      const tier2 = dedupeFamilies(clean(out?.tier2).filter(isSpecificEnough), hosts).filter((d) => !taken.has(familyKey(d))).slice(0, MAX_TIER2);
       return { tier1, tier2 };
     },
 

@@ -312,3 +312,24 @@ test('/api/suggest-sites: 글자도 그림도 없으면 400, 그림 형식이 �
   assert.equal((await w.fetch(post('/api/suggest-sites', { sample: '', imageDataUrls: [] }), env)).status, 400);
   assert.equal((await w.fetch(post('/api/suggest-sites', { sample: '글', imageDataUrls: Array(4).fill('data:image/jpeg;base64,AAAA') }), env)).status, 400);
 });
+
+import { isSpecificEnough } from '../worker/index.js';
+
+test('여러 제품의 글이 모인 사이트는 공식 사이트로 제안하지 않는다', async () => {
+  assert.equal(isSpecificEnough('codelabs.developers.google.com'), false);
+  assert.equal(isSpecificEnough('play.google.com'), false);
+  assert.equal(isSpecificEnough('antigravity.google'), true);
+  assert.equal(isSpecificEnough('support.google.com'), true);
+  assert.equal(isSpecificEnough('cloud.google.com'), true);
+
+  const f = fakes({
+    chat: (name) => (name === 'topic' ? { product: 'Antigravity', query: 'q' } : { tier1: ['antigravity.google', 'github.com'], tier2: ['codelabs.developers.google.com', 'play.google.com', 'cloud.google.com'] }),
+  });
+  const out = await (await makeWorker(f).fetch(post('/api/suggest-sites', { sample: '안티그라비티 강의' }), env)).json();
+  assert.deepEqual(out, { tier1: ['antigravity.google'], tier2: ['cloud.google.com'] });
+});
+
+test('사용자가 직접 적은 넓은 사이트는 막지 않는다', async () => {
+  const res = await makeWorker(fakes()).fetch(post('/api/check', { claim, domains: { tier1: ['antigravity.google'], tier2: ['codelabs.developers.google.com'] } }), env);
+  assert.equal(res.status, 200);
+});
