@@ -102,13 +102,19 @@ export async function checkClaim(claim, domains, deps) {
     // 공식 페이지를 읽고 모델에 판정을 맡긴 뒤 코드 규칙으로 최종 판정한다.
     // allPages 는 지금까지 읽은 공식 본문 전체다(근거 대조는 조각이 아니라 본문 전체로 한다).
     const allPages = [];
+    const tried = []; // 읽으려고 한 공식 페이지. 확인 못 함일 때 사용자가 직접 열어 볼 수 있게 돌려준다.
     const judgeWith = async (candidates) => {
+      for (const h of candidates) tried.push(h.url);
       const fetched = await Promise.allSettled(candidates.map((h) => deps.fetchPage(h.url)));
       const pages = fetched
         .filter((f) => f.status === 'fulfilled' && f.value && typeof f.value.text === 'string' && f.value.text)
         .map((f) => f.value)
         .filter((p) => tierOf(p.url, domains) < 3 && !isUserGenerated(p.url)); // 다른 곳으로 넘겨진 페이지는 뺀다
-      if (pages.length === 0) return unverified('page_unreadable');
+      if (pages.length === 0) {
+        // 사이트가 자동 읽기를 막은 경우(429, 403)는 따로 알린다. 막힌 것을 돌아가려 하지 않는다.
+        const blocked = fetched.some((f) => f.status === 'rejected' && /^http_(429|403)$/.test(String(f.reason?.code ?? f.reason?.message ?? '')));
+        return unverified(blocked ? 'page_blocked' : 'page_unreadable');
+      }
       allPages.push(...pages);
       // 긴 본문은 낱말 주변 조각만 모델에 준다.
       const shown = pages.map((p) => ({ url: p.url, text: excerptFor(p.text, terms, { maxChars: EXCERPT_CHARS }) }));
@@ -126,7 +132,7 @@ export async function checkClaim(claim, domains, deps) {
 
     // 4) 근거를 못 찾았으면 한 번만 더 찾아본다. 검색어를 본문에 나올 법한 낱말로 바꿔
     //    아직 읽지 않은 공식 페이지를 찾는다. 그래도 없으면 확인 못 함으로 둔다.
-    const retryable = result.verdict === 'unverified' && ['no_matching_quote', 'no_official_source', 'page_unreadable'].includes(result.reason);
+    const retryable = result.verdict === 'unverified' && ['no_matching_quote', 'no_official_source', 'page_unreadable', 'page_blocked'].includes(result.reason);
     const keywords = Array.isArray(claim.keywords) ? claim.keywords.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim()) : [];
     const retryQuery = keywords.slice(0, 5).join(' ');
     if (retryable && siteFilter && keywords.length >= 2 && retryQuery.toLowerCase() !== query.toLowerCase()) {
@@ -153,6 +159,9 @@ export async function checkClaim(claim, domains, deps) {
       }
     }
 
+    if (result.verdict === 'unverified' && tried.length > 0) {
+      result = { ...result, officialPages: [...new Set(tried)].slice(0, MAX_OFFICIAL_PAGES).map((url) => ({ url, hostname: hostnameOf(url) })) };
+    }
     return done(result, references);
   } catch {
     return done(unverified('api_error'));

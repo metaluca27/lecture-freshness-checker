@@ -276,3 +276,19 @@ test('내용이나 도메인이 이상해도 예외 없이 unverified', async ()
     assert.equal(r.verdict, 'unverified');
   }
 });
+
+test('공식 사이트가 자동 읽기를 막으면(429) page_blocked 로 알리고, 열어 볼 공식 문서를 돌려준다', async () => {
+  const err = Object.assign(new Error('http_429'), { code: 'http_429' });
+  const r = await checkClaim(
+    { id: 'c1', text: '무료 요금제는 자료를 30개까지 넣을 수 있어요', query: 'sources limit' },
+    { tier1: ['docs.example.com'], tier2: [] },
+    {
+      search: async () => [{ url: 'https://docs.example.com/limits', title: 'Limits' }],
+      fetchPage: async () => { throw err; },
+      judge: async () => { throw new Error('부르면 안 됨'); },
+    },
+  );
+  assert.equal(r.verdict, 'unverified');
+  assert.equal(r.reason, 'page_blocked');
+  assert.deepEqual(r.officialPages, [{ url: 'https://docs.example.com/limits', hostname: 'docs.example.com' }]);
+});
