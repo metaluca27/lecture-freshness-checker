@@ -118,7 +118,7 @@ export async function checkClaim(claim, domains, deps) {
       } catch {
         return unverified('api_error');
       }
-      return finalize(judgement, allPages, domains, claim.text);
+      return finalize(judgement, allPages, domains, claim.text, claim.kind);
     };
 
     // 3) 첫 판정

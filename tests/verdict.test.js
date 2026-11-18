@@ -224,3 +224,35 @@ test('changed 판정에는 숫자 확인을 적용하지 않는다', () => {
   );
   assert.equal(r.verdict, 'changed');
 });
+
+// ---------- 문서 제목만으로 메뉴 이름이 바뀌었다고 하지 않기 ----------
+
+const DOC = 'https://antigravity.google/docs/permissions';
+const docPages = [{ url: DOC, text: '# Agent permissions\n\nOpen **Settings** > **General** and choose **Tool Permissions** to control tools.\n\n### [v2.32.0](/releases) Latest' }];
+
+test('메뉴 이름이 바뀌었다는 근거가 문서 제목 한 줄뿐이면 unverified', () => {
+  const r = finalize(
+    { verdict: 'changed', evidence: [{ url: DOC, quote: '# Agent permissions', stance: 'changed' }], suggestion: 'Agent permissions 로 고치세요.' },
+    docPages, domains, 'Tool Permissions', 'menu',
+  );
+  assert.equal(r.verdict, 'unverified');
+  assert.equal(r.reason, 'no_matching_quote');
+  assert.match(r.humanTask, /앱 화면/);
+  assert.equal(r.suggestion, null);
+});
+
+test('메뉴 내용이라도 본문 문장이 근거면 changed 를 인정한다', () => {
+  const r = finalize(
+    { verdict: 'changed', evidence: [{ url: DOC, quote: 'Open **Settings** > **General** and choose **Tool Permissions** to control tools.', stance: 'changed' }], suggestion: 'Settings > General 로 고치세요.' },
+    docPages, domains, '왼쪽 메뉴의 Permissions 에서 열어요', 'menu',
+  );
+  assert.equal(r.verdict, 'changed');
+});
+
+test('버전 같은 다른 종류는 제목 한 줄 근거도 인정한다', () => {
+  const r = finalize(
+    { verdict: 'changed', evidence: [{ url: DOC, quote: '### [v2.32.0](/releases) Latest', stance: 'changed' }], suggestion: '2.32.0 으로 고치세요.' },
+    docPages, domains, '최신 버전은 2.28', 'version',
+  );
+  assert.equal(r.verdict, 'changed');
+});

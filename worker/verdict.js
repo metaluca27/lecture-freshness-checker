@@ -34,6 +34,11 @@ function urlKey(url) {
   }
 }
 
+// Markdown 제목 한 줄뿐인 근거인가. 예: "# Agent permissions"
+function isBareHeading(quote) {
+  return /^#{1,6}\s+[^\n]{1,80}$/.test(String(quote ?? '').trim());
+}
+
 function hostnameOf(url) {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -46,10 +51,11 @@ function hostnameOf(url) {
  * @param {unknown} modelJudgement 모델이 돌려준 판정
  * @param {Array<{url: string, text: string}>} fetchedPages 워커가 실제로 가져온 본문
  * @param {{ tier1?: string[], tier2?: string[] }} domains
+ * @param {string} claimKind 내용의 종류(menu 등). menu 일 때 제목 한 줄만으로는 바뀜을 인정하지 않는다
  * @param {string} claimText 슬라이드 문장. 주면 "그대로" 판정에서 숫자가 근거에 다 있는지 확인한다
  * @returns {{ verdict: string, evidence: Array, suggestion: string|null, humanTask: string|null, reason: string|null }}
  */
-export function finalize(modelJudgement, fetchedPages, domains, claimText = '') {
+export function finalize(modelJudgement, fetchedPages, domains, claimText = '', claimKind = '') {
   const j = modelJudgement;
   if (!j || typeof j !== 'object' || Array.isArray(j)) return unverified('no_matching_quote');
   if (!['same', 'changed', 'unverified'].includes(j.verdict)) return unverified('no_matching_quote');
@@ -97,6 +103,10 @@ export function finalize(modelJudgement, fetchedPages, domains, claimText = '') 
   const evidence = top.map(({ url, hostname, tier, quote }) => ({ url, hostname, tier, quote }));
 
   if (verdict === 'changed') {
+    // 문서 페이지의 제목은 앱의 메뉴 이름이 아니다. 메뉴 이름이 바뀌었다는 근거가 제목 한 줄뿐이면 인정하지 않는다.
+    if (claimKind === 'menu' && evidence.every((e) => isBareHeading(e.quote))) {
+      return unverified('no_matching_quote', '공식 문서의 제목이 자료의 메뉴 이름과 달라요. 문서 제목은 메뉴 이름이 아닐 수 있으니, 앱 화면에서 메뉴 이름을 직접 확인해 주세요.');
+    }
     const suggestion = typeof j.suggestion === 'string' ? j.suggestion.trim() : '';
     if (!suggestion) return unverified('no_matching_quote');
     return { verdict: 'changed', evidence, suggestion, humanTask: null, reason: null };
